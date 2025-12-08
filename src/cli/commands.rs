@@ -37,6 +37,10 @@ pub enum Commands {
         /// Show directory preview in fzf
         #[clap(short = 'v', long, default_value_t = false)]
         preview: bool,
+
+        /// fzf prompt
+        #[clap(short = 'P', long, default_value = "Select directory: ")]
+        prompt: String,
     },
 
     /// Kill session
@@ -45,6 +49,14 @@ pub enum Commands {
         /// Session name
         #[clap(short, long)]
         session: Option<String>,
+
+        /// Kill all
+        #[clap(short = 'a', long, default_value_t = false)]
+        all: bool,
+
+        /// fzf prompt
+        #[clap(short = 'P', long, default_value = "Kill session: ")]
+        prompt: String,
     },
 
     /// Rename session
@@ -64,9 +76,21 @@ pub enum Commands {
         /// Name of the session to switch to
         #[clap(short, long)]
         name: Option<String>,
+
+        /// fzf prompt
+        #[clap(short = 'P', long, default_value = "Select: ")]
+        prompt: String,
     },
 
     /// Switch to a window
     #[command(alias = "sw")]
-    SwitchWindow,
+    SwitchWindow {
+        /// fzf prompt
+        #[clap(short = 'P', long, default_value = "Select: ")]
+        prompt: String,
+
+        /// Show directory preview in fzf
+        #[clap(short = 'v', long, default_value_t = false)]
+        preview: bool,
+    },
 }

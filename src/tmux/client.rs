@@ -127,6 +127,11 @@ impl TmuxClient {
         }
     }
 
+    pub fn kill_all_sessions(&self) -> Result<()> {
+        self.tmux_cmd().arg("kill-server").output()?;
+        Ok(())
+    }
+
     pub fn rename_session(&self, current_name: Option<&str>, new_name: &str) -> Result<()> {
         let current_name = if let Some(name) = current_name {
             name.to_string()

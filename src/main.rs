@@ -32,13 +32,20 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
             name,
             path,
             preview,
-        } => commands::new::handle(client, name, path, preview),
-        Commands::Kill { session } => commands::kill::handle(client, session),
+            prompt,
+        } => commands::new::handle(client, name, path, preview, prompt),
+        Commands::Kill {
+            session,
+            prompt,
+            all,
+        } => commands::kill::handle(client, session, prompt, all),
         Commands::Rename {
             current_name,
             new_name,
         } => commands::rename::handle(client, current_name, new_name),
-        Commands::Switch { name } => commands::switch::handle(client, name),
-        Commands::SwitchWindow => commands::switch_windows::handle(client),
+        Commands::Switch { name, prompt } => commands::switch::handle(client, name, prompt),
+        Commands::SwitchWindow { prompt, preview } => {
+            commands::switch_windows::handle(client, prompt, preview)
+        }
     }
 }

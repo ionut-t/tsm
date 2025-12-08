@@ -15,6 +15,7 @@ pub fn handle(
     name: Option<String>,
     path: Option<String>,
     preview: bool,
+    prompt: String,
 ) -> Result<()> {
     let path = if let Some(p) = path {
         p
@@ -24,7 +25,7 @@ pub fn handle(
         let preview_cmd = if preview { PREVIEW_CMD } else { "" };
 
         let picker = FzfPicker::new()
-            .with_prompt("Select directory: ")
+            .with_prompt(&prompt)
             .with_preview_command(preview_cmd);
 
         match picker.pick(&dirs)? {

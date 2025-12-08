@@ -2,7 +2,12 @@ use crate::error::Result;
 use crate::history::WindowHistory;
 use crate::{fzf::FzfPicker, tmux::TmuxClient};
 
-pub fn handle(client: &TmuxClient) -> Result<()> {
+const PREVIEW_CMD: &str = r#"
+PANE_ID=$(echo {} | cut -f1)
+tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
+"#;
+
+pub fn handle(client: &TmuxClient, prompt: String, preview: bool) -> Result<()> {
     let windows = client.list_windows();
 
     let history_file = format!("{}/.tsm_history", std::env::var("HOME").unwrap_or_default());
@@ -33,14 +38,10 @@ pub fn handle(client: &TmuxClient) -> Result<()> {
         })
         .collect::<Vec<String>>();
 
-    let preview_cmd = r#"
-PANE_ID=$(echo {} | cut -f1)
-tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
-"#
-    .trim();
+    let preview_cmd = if preview { PREVIEW_CMD } else { "" };
 
     let picker = FzfPicker::new()
-        .with_prompt("Select window: ")
+        .with_prompt(&prompt)
         .with_preview_command(preview_cmd)
         .with_delimiter("\t")
         .with_nth("2..");

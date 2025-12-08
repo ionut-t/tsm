@@ -44,11 +44,12 @@ tsm switch                      # Fuzzy finder
 tsm switch -n myproject         # Direct switch
 
 # Switch windows (across all sessions)
-tsm switch-window               # Fuzzy finder with preview
+tsm switch-window --preview     # Fuzzy finder with preview
 
 # Kill session
 tsm kill                        # Fuzzy finder
 tsm kill -s myproject           # Direct kill
+tsm kll -a                      # Kill all
 
 # Rename session
 tsm rename -s mysession -n newname # Rename a session
@@ -72,7 +73,7 @@ Add these keybindings to `~/.tmux.conf` and feel like a hacker:
 
 ```tmux
 # Session manager (tsm)
-bind o display-popup -E -w 80% -h 80% "tsm switch-window"
+bind o display-popup -E -w 80% -h 80% "tsm switch-window --preview"
 bind O display-popup -E -w 40% -h 40% "tsm switch"
 bind k display-popup -E -w 40% -h 40% "tsm kill"
 bind N display-popup -E -w 80% -h 80% "tsm new --preview"

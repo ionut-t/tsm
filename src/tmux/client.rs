@@ -74,25 +74,23 @@ impl TmuxClient {
             .unwrap_or_else(|_| vec![])
     }
 
-    pub fn new_session(&self, name: Option<&str>, path: Option<&str>) -> Result<()> {
-        let session_name = name.unwrap_or_default();
-
+    pub fn new_session(&self, name: String, path: String) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("new-session")
             .arg("-d")
             .arg("-s")
-            .arg(session_name)
+            .arg(&name)
             .arg("-c")
-            .arg(path.unwrap_or("."))
+            .arg(path)
             .output()?;
 
         if output.status.success() {
             if self.is_inside_tmux() {
-                return self.switch_session(session_name);
+                return self.switch_session(&name);
             }
 
-            self.attach_session(session_name)
+            self.attach_session(&name)
         } else {
             Err(TsmError::TmuxCommand(
                 String::from_utf8_lossy(&output.stderr).to_string(),

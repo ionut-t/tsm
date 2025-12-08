@@ -33,6 +33,10 @@ pub enum Commands {
         /// Directory path (skips zoxide if provided)
         #[clap(short, long)]
         path: Option<String>,
+
+        /// Show directory preview in fzf
+        #[clap(short = 'v', long, default_value_t = false)]
+        preview: bool,
     },
 
     /// Kill session

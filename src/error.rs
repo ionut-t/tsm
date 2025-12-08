@@ -11,6 +11,9 @@ pub enum TsmError {
 
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+
+    #[error("failed to execute fzf command: {0}")]
+    Fzf(String),
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;

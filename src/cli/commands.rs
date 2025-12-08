@@ -23,10 +23,6 @@ pub struct Cli {
 /// Available commands for the CLI
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// List all tmux sessions
-    #[command(alias = "ls")]
-    List,
-
     /// Create a new tmux session
     #[command(alias = "n")]
     New {
@@ -59,10 +55,14 @@ pub enum Commands {
     },
 
     /// Switch to session
-    #[command(alias = "sw")]
+    #[command(alias = "s")]
     Switch {
         /// Name of the session to switch to
         #[clap(short, long)]
-        name: String,
+        name: Option<String>,
     },
+
+    /// Switch to a window
+    #[command(alias = "sw")]
+    SwitchWindow,
 }

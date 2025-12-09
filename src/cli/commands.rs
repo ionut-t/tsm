@@ -93,4 +93,8 @@ pub enum Commands {
         #[clap(short = 'v', long, default_value_t = false)]
         preview: bool,
     },
+
+    /// Switch to the last active window
+    #[command(alias = "lw")]
+    LastWindow,
 }

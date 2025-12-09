@@ -7,7 +7,7 @@ An overengineered CLI tool for managing tmux sessions because apparently `tmux c
 - **Fuzzy session/window switching** - Jump to any session or window with live preview (because scrolling is so 2010)
 - **Zoxide integration** - Create sessions from frequently used directories (yes, it needed another dependency)
 - **Smart history tracking** - Most recently used sessions appear first (finally, a use for all that data hoarding)
-- **Quick session management** - Create, kill, rename sessions with shortcuts (tmux keybindings, but _cooler_)
+- **Quick session management** - Create, kill, rename sessions, quick toggle between last 2 windows with shortcuts (tmux keybindings, but _cooler_)
 
 ## Requirements
 
@@ -45,6 +45,7 @@ tsm switch -n myproject         # Direct switch
 
 # Switch windows (across all sessions)
 tsm switch-window --preview     # Fuzzy finder with preview
+tsm last-window                 # Toggle between last 2 windows across sessions
 
 # Kill session
 tsm kill                        # Fuzzy finder
@@ -66,6 +67,7 @@ Most commands have short aliases:
 - `tsm k` → `tsm kill`
 - `tsm ls` → `tsm list`
 - `tsm r` → `tsm rename`
+- `tsm lw` -> `tsm last-window`
 
 ## Tmux Integration (The Cool Part)
 
@@ -77,6 +79,7 @@ bind o display-popup -E -w 80% -h 80% "tsm switch-window --preview"
 bind O display-popup -E -w 40% -h 40% "tsm switch"
 bind k display-popup -E -w 40% -h 40% "tsm kill"
 bind N display-popup -E -w 80% -h 80% "tsm new --preview"
+bind l run-shell "tsm last-window"
 ```
 
 Now you can:
@@ -85,6 +88,7 @@ Now you can:
 - `prefix + O` - Switch session (capital O for important stuff)
 - `prefix + k` - Kill session (with prejudice)
 - `prefix + N` - Create new session (because you need _another_ project opened)
+- `prefix + l` - Switch to last window
 
 ## License
 

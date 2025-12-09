@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::history::WindowHistory;
+use crate::paths;
 use crate::tmux::TmuxClient;
 
 pub fn handle(client: &TmuxClient) -> Result<()> {
@@ -10,7 +11,7 @@ pub fn handle(client: &TmuxClient) -> Result<()> {
         return Ok(());
     }
 
-    let history_file = format!("{}/.tsm_history", std::env::var("HOME").unwrap_or_default());
+    let history_file = paths::history_file_path().to_string_lossy().to_string();
     let mut history = WindowHistory::new(history_file);
     history.load()?;
     history.record_current_window(client)?;

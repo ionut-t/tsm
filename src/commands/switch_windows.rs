@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::history::WindowHistory;
+use crate::paths;
 use crate::{fzf::FzfPicker, tmux::TmuxClient};
 
 const PREVIEW_CMD: &str = r#"
@@ -10,7 +11,7 @@ tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
 pub fn handle(client: &TmuxClient, prompt: String, preview: bool) -> Result<()> {
     let windows = client.list_windows();
 
-    let history_file = format!("{}/.tsm_history", std::env::var("HOME").unwrap_or_default());
+    let history_file = paths::history_file_path().to_string_lossy().to_string();
     let mut history = WindowHistory::new(history_file);
     history.load()?;
     history.record_current_window(client)?;

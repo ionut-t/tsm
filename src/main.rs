@@ -3,6 +3,7 @@ mod commands;
 mod error;
 mod fzf;
 mod history;
+mod paths;
 mod tmux;
 mod zoxide;
 

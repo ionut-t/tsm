@@ -2,10 +2,14 @@
 name = "tsm"
 version = "0.1.0"
 edition = "2024"
+authors = ["Ionut Traistaru"]
+description = "A CLI tool for tmux session management with fuzzy finding and smart history"
+repository = "https://github.com/ionut-t/tsm"
+license = "MIT"
+keywords = ["tmux", "cli", "terminal", "session-manager"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [dependencies]
-anyhow = "1.0.100"
 clap = { version = "4.5.53", features = ["derive"] }
-serde = "1.0.228"
 thiserror = "2.0.17"
-toml = "0.9.8"

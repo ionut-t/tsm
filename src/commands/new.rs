@@ -38,6 +38,10 @@ pub fn handle(
         std::env::home_dir()
             .map(|home| path.replacen('~', &home.to_string_lossy(), 1))
             .unwrap_or(path)
+    } else if path == "." {
+        std::env::current_dir()
+            .map(|cwd| cwd.to_string_lossy().to_string())
+            .unwrap_or(path)
     } else {
         path
     };

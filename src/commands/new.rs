@@ -20,7 +20,7 @@ pub fn handle(
     let path = if let Some(p) = path {
         p
     } else {
-        let dirs = zoxide::query_directories();
+        let dirs = zoxide::query_directories()?;
 
         let preview_cmd = if preview { PREVIEW_CMD } else { "" };
 

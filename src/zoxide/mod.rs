@@ -1,13 +1,11 @@
+use crate::error::TsmError;
 use std::process::Command;
 
-pub fn query_directories() -> Vec<String> {
-    Command::new("zoxide")
-        .arg("query")
-        .arg("-l")
-        .output()
-        .map(|output| {
+pub fn query_directories() -> Result<Vec<String>, TsmError> {
+    match Command::new("zoxide").arg("query").arg("-l").output() {
+        Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout
+            let dirs = stdout
                 .lines()
                 .map(|line| {
                     if let Some(home_dir) = std::env::home_dir() {
@@ -19,7 +17,9 @@ pub fn query_directories() -> Vec<String> {
                     }
                     line.to_string()
                 })
-                .collect()
-        })
-        .unwrap_or_default()
+                .collect();
+            Ok(dirs)
+        }
+        Err(_) => Err(TsmError::ZoxideQueryFailed),
+    }
 }

@@ -14,6 +14,9 @@ pub enum TsmError {
 
     #[error("failed to execute fzf command: {0}")]
     Fzf(String),
+
+    #[error("zoxide is not installed or failed to execute")]
+    ZoxideQueryFailed,
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;

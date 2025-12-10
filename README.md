@@ -82,9 +82,12 @@ bind k display-popup -E -w 40% -h 40% "tsm kill"
 bind N display-popup -E -w 80% -h 80% "tsm new --preview"
 bind L run-shell "tsm last-session"
 bind l run-shell "tsm last-window"
+
+# Track window switches (makes last-window/last-session actually useful)
+set-hook -g after-select-window 'run-shell "tsm record"'
 ```
 
-Now you can:
+**Keybindings:**
 
 - `prefix + o` - Switch window with preview (finally, a good use for popups)
 - `prefix + O` - Switch session (capital O for important stuff)
@@ -92,6 +95,10 @@ Now you can:
 - `prefix + N` - Create new session (because you need _another_ project opened)
 - `prefix + L` - Toggle to last session (Alt+Tab, but make it tmux)
 - `prefix + l` - Toggle to last window (now you can be indecisive faster)
+
+**The Hook:**
+
+The `after-select-window` hook tracks all window switches (even native tmux commands like `prefix+w` or `prefix+n`), so `last-window` and `last-session` actually know where you've been. Without it, only switches through tsm get tracked, which is... less useful.
 
 ## License
 

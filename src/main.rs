@@ -50,5 +50,6 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
         }
         Commands::LastSession => commands::last_session::handle(client),
         Commands::LastWindow => commands::last_window::handle(client),
+        Commands::Record => commands::record::handle(client),
     }
 }

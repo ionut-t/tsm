@@ -101,4 +101,8 @@ pub enum Commands {
     /// Switch to the last active window
     #[command(alias = "lw")]
     LastWindow,
+
+    /// Record window history
+    #[command(alias = "record")]
+    Record,
 }

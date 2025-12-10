@@ -228,6 +228,32 @@ impl TmuxClient {
         }
     }
 
+    pub fn get_current_window(&self) -> Result<(String, u32)> {
+        let output = self
+            .tmux_cmd()
+            .arg("display-message")
+            .arg("-p")
+            .arg("#{session_name}:#{window_index}")
+            .output()?;
+
+        if output.status.success() {
+            let result = String::from_utf8_lossy(&output.stdout);
+            let mut parts = result.trim().splitn(2, ':');
+            if let (Some(session), Some(window)) = (parts.next(), parts.next()) {
+                if let Ok(window_index) = window.parse::<u32>() {
+                    return Ok((session.to_string(), window_index));
+                }
+            }
+            Err(TsmError::TmuxCommand(
+                "Failed to parse current window".to_string(),
+            ))
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
     pub fn display_message(&self, message: &str) -> Result<()> {
         if !self.is_inside_tmux() {
             println!("{}", message);

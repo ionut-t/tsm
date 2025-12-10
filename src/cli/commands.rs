@@ -94,6 +94,10 @@ pub enum Commands {
         preview: bool,
     },
 
+    /// Switch to the last active session
+    #[command(alias = "ls")]
+    LastSession,
+
     /// Switch to the last active window
     #[command(alias = "lw")]
     LastWindow,

@@ -48,6 +48,7 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
         Commands::SwitchWindow { prompt, preview } => {
             commands::switch_windows::handle(client, prompt, preview)
         }
+        Commands::LastSession => commands::last_session::handle(client),
         Commands::LastWindow => commands::last_window::handle(client),
     }
 }

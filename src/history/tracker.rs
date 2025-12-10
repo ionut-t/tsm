@@ -41,7 +41,7 @@ impl WindowHistory {
     pub fn save(&self) -> Result<()> {
         let mut entries: Vec<_> = self.entries.iter().collect();
         entries.sort_by(|a, b| b.1.cmp(a.1)); // Sort by timestamp descending
-        entries.truncate(100); // Keep only last 100
+        entries.truncate(100);
 
         let mut file = File::create(&self.file_path)?;
         for (window_id, timestamp) in entries {

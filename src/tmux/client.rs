@@ -228,6 +228,27 @@ impl TmuxClient {
         }
     }
 
+    pub fn display_message(&self, message: &str) -> Result<()> {
+        if !self.is_inside_tmux() {
+            println!("{}", message);
+            return Ok(());
+        }
+
+        let output = self
+            .tmux_cmd()
+            .arg("display-message")
+            .arg(message)
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
     fn list_sorted_sessions(&self) -> Vec<(String, u64)> {
         let mut sessions = self
             .tmux_cmd()

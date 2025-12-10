@@ -18,10 +18,19 @@ pub fn handle(client: &TmuxClient) -> Result<()> {
     history.load()?;
     history.record_current_window(client)?;
 
-    let indexed_windows = sort_windows_by_history(windows, &history);
+    let filtered_windows = if client.is_inside_tmux() {
+        let current_session = client.current_session()?;
+        windows
+            .into_iter()
+            .filter(|w| w.session_name != current_session)
+            .collect()
+    } else {
+        windows
+    };
 
-    // Get the previous window (index 1 = second in sorted list, after current window)
-    if let Some((window, _)) = indexed_windows.get(1) {
+    let indexed_windows = sort_windows_by_history(filtered_windows, &history);
+
+    if let Some((window, _)) = indexed_windows.first() {
         switch_to_window(client, window, &mut history)?;
     } else {
         client.display_message("No previous window found")?;

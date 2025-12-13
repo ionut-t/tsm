@@ -26,19 +26,24 @@ pub fn handle(
         return Ok(());
     }
 
-    let windows = client.list_windows();
-
     let history_file = paths::history_file_path().to_string_lossy().to_string();
     let mut history = WindowHistory::new(history_file);
     history.load()?;
 
-    let indexed_windows = sort_windows_by_history(windows, &history);
-    let window_items: Vec<String> = indexed_windows
-        .iter()
-        .map(|(w, _)| format!("{}\t {}:{}", w.pane_id, w.session_name, w.index))
-        .collect();
+    let window_address = if from.is_none() && to.is_some() {
+        let current_window = client.get_current_window()?;
+        Some(current_window)
+    } else {
+        let windows = client.list_windows();
 
-    let window_address = find_window_to_move(&window_items, from)?;
+        let indexed_windows = sort_windows_by_history(windows, &history);
+        let window_items: Vec<String> = indexed_windows
+            .iter()
+            .map(|(w, _)| format!("{}\t {}:{}", w.pane_id, w.session_name, w.index))
+            .collect();
+
+        find_window_to_move(&window_items, from)?
+    };
 
     if let Some((from_session, from_window_index)) = window_address {
         let sessions_items = sessions

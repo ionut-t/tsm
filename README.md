@@ -8,6 +8,7 @@ An overengineered CLI tool for managing tmux sessions because apparently `tmux c
 - **Zoxide integration** - Create sessions from frequently used directories (yes, it needed another dependency)
 - **Smart history tracking** - Most recently used sessions and windows appear first (finally, a use for all that data hoarding)
 - **Quick session/window toggling** - Toggle between last 2 sessions or last 2 windows with shortcuts (Alt+Tab for tmux, basically)
+- **Window management** - Move windows between sessions with automatic tracking and following (because dragging is for GUIs)
 
 ## Requirements
 
@@ -48,6 +49,11 @@ tsm switch-window --preview     # Fuzzy finder with preview
 tsm last-window                 # Toggle to last active window
 tsm last-session                # Toggle to last active window in last active session
 
+# Move windows between sessions
+tsm move-window                 # Interactive: pick window + target session
+tsm move-window -t backend      # Move current window to "backend" session
+tsm move-window -f frontend:3 -t backend  # Move specific window
+
 # Kill session
 tsm kill                        # Fuzzy finder
 tsm kill -s myproject           # Direct kill
@@ -69,6 +75,7 @@ Most commands have short aliases:
 - `tsm r` → `tsm rename`
 - `tsm lw` → `tsm last-window`
 - `tsm ls` → `tsm last-session`
+- `tsm mv` → `tsm move-window`
 
 ## Tmux Integration (The Cool Part)
 
@@ -82,6 +89,7 @@ bind k display-popup -E -w 40% -h 40% "tsm kill"
 bind N display-popup -E -w 80% -h 80% "tsm new --preview"
 bind L run-shell "tsm last-session"
 bind l run-shell "tsm last-window"
+bind M display-popup -E -w 80% -h 80% "tsm move-window"
 
 # Track window switches (makes last-window/last-session actually useful)
 set-hook -g after-select-window 'run-shell "tsm record"'
@@ -95,6 +103,7 @@ set-hook -g after-select-window 'run-shell "tsm record"'
 - `prefix + N` - Create new session (because you need _another_ project opened)
 - `prefix + L` - Toggle to last session (Alt+Tab, but make it tmux)
 - `prefix + l` - Toggle to last window (now you can be indecisive faster)
+- `prefix + M` - Move window to another session (for when you put things in the wrong place)
 
 **The Hook:**
 

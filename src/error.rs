@@ -17,6 +17,9 @@ pub enum TsmError {
 
     #[error("zoxide is not installed or failed to execute")]
     ZoxideQueryFailed,
+
+    #[error("invalid argument")]
+    InvalidArgument(String),
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;

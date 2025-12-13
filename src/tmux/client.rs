@@ -239,19 +239,88 @@ impl TmuxClient {
         if output.status.success() {
             let result = String::from_utf8_lossy(&output.stdout);
             let mut parts = result.trim().splitn(2, ':');
-            if let (Some(session), Some(window)) = (parts.next(), parts.next()) {
-                if let Ok(window_index) = window.parse::<u32>() {
-                    return Ok((session.to_string(), window_index));
-                }
+
+            match (parts.next(), parts.next()) {
+                (Some(session), Some(window)) => window
+                    .parse::<u32>()
+                    .map(|window_index| (session.to_string(), window_index))
+                    .map_err(|_| {
+                        TsmError::TmuxCommand("Failed to parse current window".to_string())
+                    }),
+                _ => Err(TsmError::TmuxCommand(
+                    "Failed to parse current window".to_string(),
+                )),
             }
-            Err(TsmError::TmuxCommand(
-                "Failed to parse current window".to_string(),
-            ))
         } else {
             Err(TsmError::TmuxCommand(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ))
         }
+    }
+
+    pub fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("move-window")
+            .arg("-s")
+            .arg(format!("{}:{}", from_session, from_index))
+            .arg("-t")
+            .arg(format!("{}:", to_session))
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn get_pane_id(&self, session: &str, window_index: u32) -> Result<String> {
+        let output = self
+            .tmux_cmd()
+            .arg("display-message")
+            .arg("-p")
+            .arg("-t")
+            .arg(format!("{}:{}", session, window_index))
+            .arg("#{pane_id}")
+            .output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(first_line) = stdout.lines().next() {
+                Ok(first_line.to_string())
+            } else {
+                Err(TsmError::TmuxCommand(
+                    "No panes found in the specified window".to_string(),
+                ))
+            }
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)> {
+        let windows = self.list_windows();
+
+        for window in windows {
+            if window.pane_id == pane_id {
+                return Ok((window.session_name, window.index));
+            }
+        }
+
+        Err(TsmError::TmuxCommand(
+            "No window found with the specified pane ID".to_string(),
+        ))
+    }
+
+    pub fn is_last_window_in_session(&self, session: &str) -> bool {
+        let windows = self.list_windows();
+        let count = windows.iter().filter(|w| w.session_name == session).count();
+        count <= 1
     }
 
     pub fn display_message(&self, message: &str) -> Result<()> {

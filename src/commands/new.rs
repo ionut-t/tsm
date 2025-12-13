@@ -1,14 +1,10 @@
 use std::path::Path;
 
+use crate::commands::utils::PREVIEW_CMD;
 use crate::error::Result;
 use crate::fzf::FzfPicker;
 use crate::tmux::TmuxClient;
 use crate::zoxide;
-
-const PREVIEW_CMD: &str = r#"
-DIR=$(echo {} | sed "s|^~|$HOME|")
-eza --tree --level=2 --icons --group-directories-first --color=always "$DIR" 2>/dev/null || tree -C -L 2 "$DIR" 2>/dev/null || ls -lAhG "$DIR"
-"#;
 
 pub fn handle(
     client: &TmuxClient,

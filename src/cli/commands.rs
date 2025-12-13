@@ -105,4 +105,16 @@ pub enum Commands {
     /// Record window history
     #[command(alias = "record")]
     Record,
+
+    /// Move window to another session
+    #[command(alias = "mv")]
+    MoveWindow {
+        /// From session name
+        #[clap(short, long)]
+        from: Option<String>,
+
+        /// To session name
+        #[clap(short, long)]
+        to: Option<String>,
+    },
 }

@@ -2,6 +2,11 @@ use crate::error::Result;
 use crate::history::WindowHistory;
 use crate::tmux::{TmuxClient, Window};
 
+pub const PREVIEW_CMD: &str = r#"
+PANE_ID=$(echo {} | cut -f1)
+tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
+"#;
+
 /// Sort windows by access time (most recent first) and return indexed list
 pub fn sort_windows_by_history(
     windows: Vec<Window>,

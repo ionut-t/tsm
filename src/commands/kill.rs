@@ -7,6 +7,7 @@ pub fn handle(
     session: Option<String>,
     prompt: String,
     all: bool,
+    quiet: bool,
 ) -> Result<()> {
     if all {
         client.kill_all_sessions()?;
@@ -26,5 +27,10 @@ pub fn handle(
     };
 
     client.kill_session(&target)?;
+
+    if !quiet {
+        client.display_message(&format!("Killed session: {}", target))?;
+    }
+
     Ok(())
 }

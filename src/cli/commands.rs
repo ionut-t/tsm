@@ -41,6 +41,10 @@ pub enum Commands {
         /// fzf prompt
         #[clap(short = 'P', long, default_value = "Select directory: ")]
         prompt: String,
+
+        /// No success message
+        #[clap(short = 'q', long, default_value_t = false)]
+        quiet: bool,
     },
 
     /// Kill session
@@ -57,6 +61,10 @@ pub enum Commands {
         /// fzf prompt
         #[clap(short = 'P', long, default_value = "Kill session: ")]
         prompt: String,
+
+        /// No success message
+        #[clap(short = 'q', long, default_value_t = false)]
+        quiet: bool,
     },
 
     /// Rename session
@@ -116,6 +124,10 @@ pub enum Commands {
         /// To session name
         #[clap(short, long)]
         to: Option<String>,
+
+        /// No success message
+        #[clap(short = 'q', long, default_value_t = false)]
+        quiet: bool,
     },
 
     /// Swap two windows in the same session
@@ -127,5 +139,9 @@ pub enum Commands {
         /// Target window index
         #[clap(short, long)]
         target: u32,
+
+        /// No success message
+        #[clap(short = 'q', long, default_value_t = false)]
+        quiet: bool,
     },
 }

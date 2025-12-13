@@ -4,7 +4,7 @@ use crate::history::WindowHistory;
 use crate::paths;
 use crate::tmux::TmuxClient;
 
-pub fn handle(client: &TmuxClient, source: Option<u32>, target: u32) -> Result<()> {
+pub fn handle(client: &TmuxClient, source: Option<u32>, target: u32, quiet: bool) -> Result<()> {
     if !client.is_inside_tmux() {
         return Err(TsmError::NotInTmux);
     }
@@ -62,7 +62,9 @@ pub fn handle(client: &TmuxClient, source: Option<u32>, target: u32) -> Result<(
         history.save()?;
     }
 
-    client.display_message(&format!("Swapped windows {} and {}", source_index, target,))?;
+    if !quiet {
+        client.display_message(&format!("Swapped windows {} and {}", source_index, target,))?;
+    }
 
     Ok(())
 }

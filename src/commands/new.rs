@@ -12,6 +12,7 @@ pub fn handle(
     path: Option<String>,
     preview: bool,
     prompt: String,
+    quiet: bool,
 ) -> Result<()> {
     let path = if let Some(p) = path {
         p
@@ -51,7 +52,28 @@ pub fn handle(
         }
     };
 
-    client.new_session(name, expanded_path)?;
+    let sessions = client.list_sessions();
+    if sessions.contains(&name) {
+        if client.is_inside_tmux() {
+            client.switch_session(&name)?;
+        } else {
+            client.attach_session(&name)?;
+        }
+
+        if !quiet {
+            client.display_message(&format!(
+                "{} session already exists. Switching to it.",
+                name
+            ))?;
+        }
+        return Ok(());
+    }
+
+    client.new_session(name.clone(), expanded_path)?;
+
+    if !quiet {
+        client.display_message(&format!("Created new session '{}'", name))?;
+    }
     Ok(())
 }
 

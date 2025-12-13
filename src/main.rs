@@ -34,12 +34,14 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
             path,
             preview,
             prompt,
-        } => commands::new::handle(client, name, path, preview, prompt),
+            quiet,
+        } => commands::new::handle(client, name, path, preview, prompt, quiet),
         Commands::Kill {
             session,
             prompt,
             all,
-        } => commands::kill::handle(client, session, prompt, all),
+            quiet,
+        } => commands::kill::handle(client, session, prompt, all, quiet),
         Commands::Rename {
             current_name,
             new_name,
@@ -51,7 +53,13 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
         Commands::LastSession => commands::last_session::handle(client),
         Commands::LastWindow => commands::last_window::handle(client),
         Commands::Record => commands::record::handle(client),
-        Commands::MoveWindow { from, to } => commands::move_window::handle(client, from, to),
-        Commands::SwapWindow { source, target } => commands::swap::handle(client, source, target),
+        Commands::MoveWindow { from, to, quiet } => {
+            commands::move_window::handle(client, from, to, quiet)
+        }
+        Commands::SwapWindow {
+            source,
+            target,
+            quiet,
+        } => commands::swap::handle(client, source, target, quiet),
     }
 }

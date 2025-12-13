@@ -7,7 +7,12 @@ use crate::{
     paths,
 };
 
-pub fn handle(client: &TmuxClient, from: Option<String>, to: Option<String>) -> Result<()> {
+pub fn handle(
+    client: &TmuxClient,
+    from: Option<String>,
+    to: Option<String>,
+    quiet: bool,
+) -> Result<()> {
     if from.is_none() && !client.is_inside_tmux() {
         client
             .display_message("Error: Must be inside a tmux session to move the current window")?;
@@ -64,11 +69,13 @@ pub fn handle(client: &TmuxClient, from: Option<String>, to: Option<String>) -> 
             history.record_access(&session, new_window_index);
             history.save()?;
 
-            client.display_message(&format!(
-                "Moved window {}:{} to session {}:{}",
-                from_session, from_window_index, to_session, new_window_index
-            ))?;
-        } else {
+            if !quiet {
+                client.display_message(&format!(
+                    "Moved window {}:{} to session {}:{}",
+                    from_session, from_window_index, to_session, new_window_index
+                ))?;
+            }
+        } else if !quiet {
             client.display_message("No target session selected, aborting move")?;
         }
 

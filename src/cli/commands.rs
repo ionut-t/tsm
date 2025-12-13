@@ -117,4 +117,15 @@ pub enum Commands {
         #[clap(short, long)]
         to: Option<String>,
     },
+
+    /// Swap two windows in the same session
+    SwapWindow {
+        /// Source window index (defaults to the current window)
+        #[clap(short, long)]
+        source: Option<u32>,
+
+        /// Target window index
+        #[clap(short, long)]
+        target: u32,
+    },
 }

@@ -5,6 +5,7 @@ pub mod move_window;
 pub mod new;
 pub mod record;
 pub mod rename;
+pub mod swap;
 pub mod switch;
 pub mod switch_windows;
 mod utils;

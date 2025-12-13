@@ -317,6 +317,27 @@ impl TmuxClient {
         ))
     }
 
+    pub fn swap_windows(&self, source_index: u32, target_index: u32) -> Result<()> {
+        let (session_name, _) = self.get_current_window()?;
+
+        let output = self
+            .tmux_cmd()
+            .arg("swap-window")
+            .arg("-s")
+            .arg(format!("{}:{}", session_name, source_index))
+            .arg("-t")
+            .arg(format!("{}:{}", session_name, target_index))
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
     pub fn is_last_window_in_session(&self, session: &str) -> bool {
         let windows = self.list_windows();
         let count = windows.iter().filter(|w| w.session_name == session).count();

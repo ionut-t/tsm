@@ -52,5 +52,6 @@ fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<
         Commands::LastWindow => commands::last_window::handle(client),
         Commands::Record => commands::record::handle(client),
         Commands::MoveWindow { from, to } => commands::move_window::handle(client, from, to),
+        Commands::SwapWindow { source, target } => commands::swap::handle(client, source, target),
     }
 }

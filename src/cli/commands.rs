@@ -10,14 +10,6 @@ pub struct Cli {
     /// The command to run
     #[clap(subcommand)]
     pub command: Option<Commands>,
-
-    /// The name of the task
-    #[clap(short, long)]
-    pub name: Option<String>,
-
-    /// The description of the task
-    #[clap(short, long)]
-    pub description: Option<String>,
 }
 
 /// Available commands for the CLI

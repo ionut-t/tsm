@@ -108,7 +108,11 @@ pub enum Commands {
 
     /// Switch to the last active window
     #[command(alias = "lw")]
-    LastWindow,
+    LastWindow {
+        /// Whether to limit to the current session
+        #[clap(short, long, default_value_t = false)]
+        current_session: bool,
+    },
 
     /// Record window history
     #[command(alias = "record")]

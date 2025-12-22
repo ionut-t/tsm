@@ -6,7 +6,12 @@ use crate::tmux::TmuxClient;
 use super::utils::{sort_windows_by_history, switch_to_window};
 
 pub fn handle(client: &TmuxClient, current_session: bool) -> Result<()> {
-    let windows = client.list_windows();
+    let mut windows = client.list_windows();
+
+    if current_session {
+        let current_session = client.current_session()?;
+        windows.retain(|w| w.session_name == current_session);
+    }
 
     if windows.is_empty() {
         client.display_message("No windows found")?;
@@ -18,12 +23,7 @@ pub fn handle(client: &TmuxClient, current_session: bool) -> Result<()> {
     history.load()?;
     history.record_current_window(client)?;
 
-    let mut indexed_windows = sort_windows_by_history(windows, &history);
-
-    if current_session {
-        let current_session = client.current_session()?;
-        indexed_windows.retain(|(window, _)| window.session_name == current_session);
-    }
+    let indexed_windows = sort_windows_by_history(windows, &history);
 
     // Get the previous window (index 1 = second in sorted list, after current window)
     if let Some((window, _)) = indexed_windows.get(1) {

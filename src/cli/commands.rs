@@ -1,5 +1,16 @@
 use clap::{Parser, Subcommand, command};
 
+use crate::{
+    cli::{
+        kill::KillCommand, last_session::LastSessionCommand, last_window::LastWindowCommand,
+        move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
+        rename::RenameCommand, swap::SwapWindowCommand, switch::SwitchCommand,
+        switch_windows::SwitchWindowCommand,
+    },
+    error::Result,
+    tmux::TmuxClient,
+};
+
 /// A CLI for managing tmux sessions and windows
 #[derive(Parser)]
 #[command(name = "tsm")]
@@ -9,7 +20,7 @@ use clap::{Parser, Subcommand, command};
 pub struct Cli {
     /// The command to run
     #[clap(subcommand)]
-    pub command: Option<Commands>,
+    pub command: Commands,
 }
 
 /// Available commands for the CLI
@@ -17,127 +28,57 @@ pub struct Cli {
 pub enum Commands {
     /// Create a new tmux session
     #[command(alias = "n")]
-    New {
-        /// Session name (auto-generated if not provided)
-        #[clap(short, long)]
-        name: Option<String>,
-
-        /// Directory path (skips zoxide if provided)
-        #[clap(short, long)]
-        path: Option<String>,
-
-        /// Show directory preview in fzf
-        #[clap(short = 'v', long, default_value_t = false)]
-        preview: bool,
-
-        /// fzf prompt
-        #[clap(short = 'P', long, default_value = "Select directory: ")]
-        prompt: String,
-
-        /// No success message
-        #[clap(short = 'q', long, default_value_t = false)]
-        quiet: bool,
-    },
+    New(NewCommand),
 
     /// Kill session
     #[command(alias = "k")]
-    Kill {
-        /// Session name
-        #[clap(short, long)]
-        session: Option<String>,
-
-        /// Kill all
-        #[clap(short = 'a', long, default_value_t = false)]
-        all: bool,
-
-        /// fzf prompt
-        #[clap(short = 'P', long, default_value = "Kill session: ")]
-        prompt: String,
-
-        /// No success message
-        #[clap(short = 'q', long, default_value_t = false)]
-        quiet: bool,
-    },
+    Kill(KillCommand),
 
     /// Rename session
     #[command(alias = "r")]
-    Rename {
-        /// Current name - defaults to the active session if not provided
-        #[clap(short = 'c', long)]
-        current_name: Option<String>,
-        /// New name
-        #[clap(short = 'n', long)]
-        new_name: String,
-    },
+    Rename(RenameCommand),
 
     /// Switch to session
     #[command(alias = "s")]
-    Switch {
-        /// Name of the session to switch to
-        #[clap(short, long)]
-        name: Option<String>,
-
-        /// fzf prompt
-        #[clap(short = 'P', long, default_value = "Select: ")]
-        prompt: String,
-    },
+    Switch(SwitchCommand),
 
     /// Switch to a window
     #[command(alias = "sw")]
-    SwitchWindow {
-        /// fzf prompt
-        #[clap(short = 'P', long, default_value = "Select: ")]
-        prompt: String,
-
-        /// Show directory preview in fzf
-        #[clap(short = 'v', long, default_value_t = false)]
-        preview: bool,
-    },
+    SwitchWindow(SwitchWindowCommand),
 
     /// Switch to the last active session
     #[command(alias = "ls")]
-    LastSession,
+    LastSession(LastSessionCommand),
 
     /// Switch to the last active window
     #[command(alias = "lw")]
-    LastWindow {
-        /// Whether to limit to the current session
-        #[clap(short, long, default_value_t = false)]
-        current_session: bool,
-    },
+    LastWindow(LastWindowCommand),
 
     /// Record window history
     #[command(alias = "record")]
-    Record,
+    Record(RecordCommand),
 
     /// Move window to another session
     #[command(alias = "mv")]
-    MoveWindow {
-        /// From session name
-        #[clap(short, long)]
-        from: Option<String>,
-
-        /// To session name
-        #[clap(short, long)]
-        to: Option<String>,
-
-        /// No success message
-        #[clap(short = 'q', long, default_value_t = false)]
-        quiet: bool,
-    },
+    MoveWindow(MoveWindowCommand),
 
     /// Swap two windows in the same session
-    SwapWindow {
-        /// Source window index (defaults to the current window)
-        #[clap(short, long)]
-        source: Option<u32>,
+    SwapWindow(SwapWindowCommand),
+}
 
-        /// Target window index
-        #[clap(short, long)]
-        target: u32,
-
-        /// No success message
-        #[clap(short = 'q', long, default_value_t = false)]
-        quiet: bool,
-    },
+impl Cli {
+    pub fn run(&self, client: TmuxClient) -> Result<()> {
+        match &self.command {
+            Commands::New(cmd) => cmd.run(&client),
+            Commands::Kill(cmd) => cmd.run(&client),
+            Commands::Rename(cmd) => cmd.run(&client),
+            Commands::Switch(cmd) => cmd.run(&client),
+            Commands::SwitchWindow(cmd) => cmd.run(&client),
+            Commands::LastSession(cmd) => cmd.run(&client),
+            Commands::LastWindow(cmd) => cmd.run(&client),
+            Commands::Record(cmd) => cmd.run(&client),
+            Commands::MoveWindow(cmd) => cmd.run(&client),
+            Commands::SwapWindow(cmd) => cmd.run(&client),
+        }
+    }
 }

@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::Result;
 use crate::tmux::TmuxClient;
 
 pub struct WindowHistory {
-    file_path: String,
+    file_path: PathBuf,
     entries: HashMap<String, u64>,
 }
 
 impl WindowHistory {
-    pub fn new(file_path: String) -> Self {
+    pub fn new(file_path: PathBuf) -> Self {
         Self {
             file_path,
             entries: HashMap::new(),
@@ -21,7 +21,7 @@ impl WindowHistory {
     }
 
     pub fn load(&mut self) -> Result<()> {
-        if Path::new(&self.file_path).exists() {
+        if self.file_path.exists() {
             let file = File::open(&self.file_path)?;
             let reader = BufReader::new(file);
 

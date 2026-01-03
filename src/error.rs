@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TsmError {
-    #[error("not inside a tmux session")]
+    #[error("Not inside a tmux session")]
     NotInTmux,
 
     #[error("failed to execute tmux command: {0}")]
@@ -18,7 +18,7 @@ pub enum TsmError {
     #[error("zoxide is not installed or failed to execute")]
     ZoxideQueryFailed,
 
-    #[error("invalid argument")]
+    #[error("{0}")]
     InvalidArgument(String),
 }
 

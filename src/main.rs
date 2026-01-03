@@ -1,5 +1,4 @@
 mod cli;
-mod commands;
 mod error;
 mod fzf;
 mod history;
@@ -11,57 +10,16 @@ use clap::Parser;
 use cli::Cli;
 use tmux::TmuxClient;
 
-fn main() {
+fn main() -> error::Result<()> {
     let cli = Cli::parse();
     let client = TmuxClient::new();
 
-    if let Some(command) = cli.command {
-        if let Err(e) = handle_command(command, &client) {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
-    } else {
-        eprintln!("No command provided. Use --help for more information");
-    }
-}
+    if let Err(e) = cli.run(client) {
+        let error_client = TmuxClient::new();
+        let _ = error_client.display_message(&format!("Error: {}", e));
 
-fn handle_command(command: cli::Commands, client: &TmuxClient) -> error::Result<()> {
-    use cli::Commands;
-
-    match command {
-        Commands::New {
-            name,
-            path,
-            preview,
-            prompt,
-            quiet,
-        } => commands::new::handle(client, name, path, preview, prompt, quiet),
-        Commands::Kill {
-            session,
-            prompt,
-            all,
-            quiet,
-        } => commands::kill::handle(client, session, prompt, all, quiet),
-        Commands::Rename {
-            current_name,
-            new_name,
-        } => commands::rename::handle(client, current_name, new_name),
-        Commands::Switch { name, prompt } => commands::switch::handle(client, name, prompt),
-        Commands::SwitchWindow { prompt, preview } => {
-            commands::switch_windows::handle(client, prompt, preview)
-        }
-        Commands::LastSession => commands::last_session::handle(client),
-        Commands::LastWindow { current_session } => {
-            commands::last_window::handle(client, current_session)
-        }
-        Commands::Record => commands::record::handle(client),
-        Commands::MoveWindow { from, to, quiet } => {
-            commands::move_window::handle(client, from, to, quiet)
-        }
-        Commands::SwapWindow {
-            source,
-            target,
-            quiet,
-        } => commands::swap::handle(client, source, target, quiet),
+        return Err(e);
     }
+
+    Ok(())
 }

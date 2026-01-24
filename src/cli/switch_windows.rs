@@ -24,7 +24,7 @@ impl SwitchWindowCommand {
     ///
     /// Displays an fzf picker with all windows sorted by access history and switches to the selected window.
     pub fn run(&self, client: &TmuxClient) -> Result<()> {
-        let windows = client.list_windows();
+        let windows = client.list_windows()?;
 
         let mut history = WindowHistory::new(paths::history_file_path());
         history.load()?;
@@ -84,7 +84,7 @@ impl SwitchWindowCommand {
             ))
         })?;
 
-        history.record_access(&window.session_name, window.index);
+        history.record_access(&window.session_name, window.index)?;
         history.save()?;
 
         if client.is_inside_tmux() {

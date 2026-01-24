@@ -46,7 +46,7 @@ impl SwapWindowCommand {
         }
 
         let session = client.current_session()?;
-        let all_windows = client.list_windows();
+        let all_windows = client.list_windows()?;
         let session_windows: Vec<_> = all_windows
             .into_iter()
             .filter(|w| w.session_name == session)
@@ -83,7 +83,7 @@ impl SwapWindowCommand {
 
             let mut history = WindowHistory::new(paths::history_file_path());
             history.load()?;
-            history.record_access(&session, self.target);
+            history.record_access(&session, self.target)?;
             history.save()?;
         }
 

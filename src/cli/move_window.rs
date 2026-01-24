@@ -1,7 +1,7 @@
 use crate::{
     TmuxClient,
     cli::utils::{PREVIEW_CMD, sort_windows_by_history},
-    error::Result,
+    error::{Result, TsmError},
     fzf::FzfPicker,
     history::WindowHistory,
     paths,
@@ -50,7 +50,7 @@ impl MoveWindowCommand {
             let current_window = client.get_current_window()?;
             Some(current_window)
         } else {
-            let windows = client.list_windows();
+            let windows = client.list_windows()?;
 
             let indexed_windows = sort_windows_by_history(windows, &history);
             let window_items: Vec<String> = indexed_windows
@@ -62,18 +62,24 @@ impl MoveWindowCommand {
         };
 
         if let Some((from_session, from_window_index)) = window_address {
-            let sessions_items = sessions
+            let sessions_items: Vec<String> = sessions
                 .iter()
                 .filter(|s| *s != &from_session)
                 .map(|s| s.to_string())
-                .collect::<Vec<String>>();
+                .collect();
+
+            if sessions_items.is_empty() {
+                return Err(TsmError::InvalidArgument(
+                    "No target sessions available to move window to".to_string(),
+                ));
+            }
 
             let target_session = find_target_session(&sessions_items, &self.to)?;
 
             if let Some(to_session) = target_session {
                 let pane_id = client.get_pane_id(&from_session, from_window_index)?;
 
-                if client.is_last_window_in_session(&from_session) {
+                if client.is_last_window_in_session(&from_session)? {
                     client.switch_session(&to_session)?;
                 }
 
@@ -87,7 +93,7 @@ impl MoveWindowCommand {
                     client.attach_to_window(session.as_str(), new_window_index)?;
                 }
 
-                history.record_access(&session, new_window_index);
+                history.record_access(&session, new_window_index)?;
                 history.save()?;
 
                 if !self.quiet {

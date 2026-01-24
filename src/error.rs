@@ -18,6 +18,9 @@ pub enum TsmError {
     #[error("zoxide is not installed or failed to execute")]
     ZoxideQueryFailed,
 
+    #[error("Home directory not found")]
+    HomeDirectoryNotFound,
+
     #[error("{0}")]
     InvalidArgument(String),
 }

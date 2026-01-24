@@ -41,37 +41,47 @@ impl TmuxClient {
             .collect()
     }
 
-    pub fn list_windows(&self) -> Vec<Window> {
-        self.tmux_cmd()
+    pub fn list_windows(&self) -> Result<Vec<Window>> {
+        let output = self
+            .tmux_cmd()
             .arg("list-windows")
             .arg("-a")
             .arg("-F")
             .arg("#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}")
-            .output()
-            .map(|output| {
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    stdout
-                        .lines()
-                        .filter_map(|line| {
-                            let parts: Vec<&str> = line.split('\t').collect();
-                            if parts.len() >= 4 {
-                                Some(Window {
-                                    session_name: parts[0].to_string(),
-                                    index: parts[1].parse().ok()?,
-                                    name: parts[2].to_string(),
-                                    pane_id: parts[3].to_string(),
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
+            .output()?;
+
+        if !output.status.success() {
+            return Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let windows: Result<Vec<Window>> = stdout
+            .lines()
+            .map(|line| {
+                let parts: Vec<&str> = line.split('\t').collect();
+                if parts.len() >= 4 {
+                    let window_index = parts[1].parse::<u32>().map_err(|_| {
+                        TsmError::TmuxCommand(format!("Failed to parse window index: {}", parts[1]))
+                    })?;
+
+                    Ok(Window {
+                        session_name: parts[0].to_string(),
+                        index: window_index,
+                        name: parts[2].to_string(),
+                        pane_id: parts[3].to_string(),
+                    })
                 } else {
-                    vec![]
+                    Err(TsmError::TmuxCommand(format!(
+                        "Invalid window line format: {}",
+                        line
+                    )))
                 }
             })
-            .unwrap_or_else(|_| vec![])
+            .collect();
+
+        windows
     }
 
     pub fn new_session(&self, name: String, path: String) -> Result<()> {
@@ -304,7 +314,7 @@ impl TmuxClient {
     }
 
     pub fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)> {
-        let windows = self.list_windows();
+        let windows = self.list_windows()?;
 
         for window in windows {
             if window.pane_id == pane_id {
@@ -338,10 +348,10 @@ impl TmuxClient {
         }
     }
 
-    pub fn is_last_window_in_session(&self, session: &str) -> bool {
-        let windows = self.list_windows();
+    pub fn is_last_window_in_session(&self, session: &str) -> Result<bool> {
+        let windows = self.list_windows()?;
         let count = windows.iter().filter(|w| w.session_name == session).count();
-        count <= 1
+        Ok(count == 1)
     }
 
     pub fn display_message(&self, message: &str) -> Result<()> {

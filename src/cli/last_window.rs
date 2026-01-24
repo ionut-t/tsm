@@ -21,7 +21,7 @@ impl LastWindowCommand {
     ///
     /// Switches to the second most recently accessed window (the previous window).
     pub fn run(&self, client: &TmuxClient) -> Result<()> {
-        let mut windows = client.list_windows();
+        let mut windows = client.list_windows()?;
 
         if self.current_session {
             let current_session = client.current_session()?;

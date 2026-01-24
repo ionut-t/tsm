@@ -3,15 +3,21 @@ use crate::history::WindowHistory;
 use crate::tmux::{TmuxClient, Window};
 
 pub const PREVIEW_CMD: &str = r#"
-PANE_ID=$(echo {} | cut -f1)
-tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
+# Sanitize input to prevent command injection
+PANE_ID=$(echo {} | cut -f1 | sed 's/[^a-zA-Z0-9_%@:-]//g')
+# Validate that PANE_ID looks like a tmux pane ID (e.g., %1, %2, etc.)
+if [[ "$PANE_ID" =~ ^%[0-9]+$ ]]; then
+    tmux capture-pane -e -p -t "$PANE_ID" 2>/dev/null || echo "No preview available"
+else
+    echo "Invalid pane ID"
+fi
 "#;
 
 /// Sort windows by access time (most recent first) and return indexed list
 pub fn sort_windows_by_history(
     windows: Vec<Window>,
     history: &WindowHistory,
-) -> Vec<(Window, u64)> {
+) -> Vec<(Window, u128)> {
     let mut indexed_windows: Vec<_> = windows
         .into_iter()
         .map(|w| {
@@ -31,7 +37,7 @@ pub fn switch_to_window(
     window: &Window,
     history: &mut WindowHistory,
 ) -> Result<()> {
-    history.record_access(&window.session_name, window.index);
+    history.record_access(&window.session_name, window.index)?;
     history.save()?;
 
     if client.is_inside_tmux() {

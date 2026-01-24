@@ -17,7 +17,7 @@ impl LastSessionCommand {
     ///
     /// Switches to the most recently accessed window in a different session.
     pub fn run(&self, client: &TmuxClient) -> Result<()> {
-        let windows = client.list_windows();
+        let windows = client.list_windows()?;
 
         if windows.is_empty() {
             client.display_message("No windows found")?;

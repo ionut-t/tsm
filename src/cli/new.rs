@@ -56,13 +56,11 @@ impl NewCommand {
         };
 
         let expanded_path = if path.starts_with('~') {
-            std::env::home_dir()
-                .map(|home| path.replacen('~', &home.to_string_lossy(), 1))
-                .unwrap_or(path)
+            let home = std::env::home_dir()
+                .ok_or(crate::error::TsmError::HomeDirectoryNotFound)?;
+            path.replacen('~', &home.to_string_lossy(), 1)
         } else if path == "." {
-            std::env::current_dir()
-                .map(|cwd| cwd.to_string_lossy().to_string())
-                .unwrap_or(path)
+            std::env::current_dir()?.to_string_lossy().to_string()
         } else {
             path
         };
@@ -109,7 +107,8 @@ fn sanitise_session_name(name: &str) -> String {
         name = name.trim_start_matches(".");
     }
 
-    name.chars()
+    let sanitised: String = name
+        .chars()
         .map(|c| {
             if c.is_whitespace() || c == '.' {
                 '_'
@@ -117,5 +116,11 @@ fn sanitise_session_name(name: &str) -> String {
                 c
             }
         })
-        .collect()
+        .collect();
+
+    if sanitised.is_empty() {
+        "_".to_string()
+    } else {
+        sanitised
+    }
 }

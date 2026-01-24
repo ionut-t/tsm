@@ -19,7 +19,7 @@ impl RecordCommand {
 
         let mut history = WindowHistory::new(paths::history_file_path());
         history.load()?;
-        history.record_access(&session, window);
+        history.record_access(&session, window)?;
         history.save()?;
 
         Ok(())

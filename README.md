@@ -9,12 +9,14 @@ An overengineered CLI tool for managing tmux sessions because apparently `tmux c
 - **Smart history tracking** - Most recently used sessions and windows appear first (finally, a use for all that data hoarding)
 - **Quick session/window toggling** - Toggle between last 2 sessions or last 2 windows with shortcuts (Alt+Tab for tmux, basically)
 - **Window management** - Move windows between sessions and swap windows within sessions (because clicking is overrated)
+- **Workspaces** - Define session layouts in TOML files (because typing commands is for people with free time)
 
 ## Requirements
 
 - [tmux](https://github.com/tmux/tmux) - obviously
 - [fzf](https://github.com/junegunn/fzf) - for the fuzzy finding magic ✨
 - [zoxide](https://github.com/ajeetdsouza/zoxide) - because `cd` is too mainstream
+- [bat](https://github.com/sharkdp/bat) - for pretty previews (cat is for animals)
 
 ## Installation (The Rust Way™)
 
@@ -66,6 +68,17 @@ tsm kll -a                      # Kill all
 # Rename session
 tsm rename -s mysession -n newname # Rename a session
 tsm rename -n newname              # Rename current session
+
+# Workspaces (session templates)
+tsm workspace                       # Pick and launch workspace
+tsm workspace myproject             # Launch specific workspace
+tsm workspace -n custom-name        # Override session name
+tsm workspace -p ~/other/path       # Override root directory
+tsm workspace new myproject         # Create new workspace (opens editor)
+tsm workspace edit myproject        # Edit existing workspace
+tsm workspace list                  # List all workspaces
+tsm workspace delete myproject      # Delete workspace
+tsm workspace path                  # Show workspaces directory
 ```
 
 ## Aliases
@@ -81,6 +94,53 @@ Most commands have short aliases:
 - `tsm ls` → `tsm last-session`
 - `tsm mv` → `tsm move-window`
 - `tsm sww` → `tsm swap-window`
+- `tsm ws` → `tsm workspace`
+
+## Workspaces (For the Declarative Obsessed)
+
+Workspaces let you define session layouts in TOML files. Store them in `~/.config/tsm/workspaces/` (or set `TSM_CONFIG_DIR` if you're that person).
+
+```toml
+# ~/.config/tsm/workspaces/myproject.toml
+name = "myproject"
+root = "~/code/myproject"
+
+[[window]]
+name = "code"
+focus = true
+
+[[window.row]]
+
+[[window.row.pane]]
+command = "nvim ."
+focus = true
+
+[[window]]
+name = "servers"
+
+[[window.row]]
+height = 70
+
+[[window.row.pane]]
+command = "cargo watch -x check"
+width = 50
+
+[[window.row.pane]]
+command = "npm run dev"
+
+[[window.row]]
+
+[[window.row.pane]]
+command = "lazygit"
+```
+
+This creates a session with two windows: one for coding, one split into rows for running servers. Yes, you could just type these commands manually. But where's the fun in that?
+
+**Workspace config location priority:**
+
+1. `TSM_CONFIG_DIR` environment variable
+2. `XDG_CONFIG_HOME/tsm/workspaces`
+3. `~/.config/tsm/workspaces` (the default for people who don't overthink config paths)
 
 ## Tmux Integration (The Cool Part)
 
@@ -96,6 +156,7 @@ bind L run-shell "tsm last-session"
 bind l run-shell "tsm last-window"
 bind M display-popup -E -w 80% -h 80% "tsm move-window"
 bind m command-prompt -p "Swap with window:" "run-shell 'tsm swap-window -t %%'"
+bind W display-popup -E -w 80% -h 80% "tsm workspace"
 
 # Track window switches (makes last-window/last-session actually useful)
 set-hook -g after-select-window 'run-shell "tsm record"'
@@ -111,6 +172,7 @@ set-hook -g after-select-window 'run-shell "tsm record"'
 - `prefix + l` - Toggle to last window (now you can be indecisive faster)
 - `prefix + M` - Move window to another session (for when you put things in the wrong place)
 - `prefix + m` - Swap current window with another (manual reordering for perfectionists)
+- `prefix + W` - Launch workspace (for your carefully crafted TOML files)
 
 **The Hook:**
 

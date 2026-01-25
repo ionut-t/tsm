@@ -17,6 +17,247 @@ impl TmuxClient {
         std::env::var("TMUX").is_ok()
     }
 
+    pub fn new_window(
+        &self,
+        session: &str,
+        name: Option<&str>,
+        path: Option<&std::path::Path>,
+    ) -> Result<usize> {
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("new-window")
+            .arg("-t")
+            .arg(session)
+            .arg("-d")
+            .arg("-P")
+            .arg("-F")
+            .arg("#{window_index}");
+
+        if let Some(window_name) = name {
+            cmd.arg("-n").arg(window_name);
+        }
+
+        if let Some(p) = path {
+            cmd.arg("-c").arg(p);
+        }
+
+        let output = cmd.output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse::<usize>().map_err(|_| {
+                TsmError::TmuxCommand(format!(
+                    "Failed to parse window index from: '{}'",
+                    stdout.trim()
+                ))
+            })
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn rename_window(&self, session: &str, new_name: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("rename-window")
+            .arg("-t")
+            .arg(session)
+            .arg(new_name)
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Split a pane horizontally (creates panes side by side)
+    pub fn split_horizontal(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+    ) -> Result<String> {
+        self.split_pane_internal(target_pane, "-h", path, percentage)
+    }
+
+    /// Split a pane vertically (creates panes stacked top/bottom)
+    pub fn split_vertical(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+    ) -> Result<String> {
+        self.split_pane_internal(target_pane, "-v", path, percentage)
+    }
+
+    fn split_pane_internal(
+        &self,
+        target_pane: &str,
+        split_flag: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+    ) -> Result<String> {
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("split-window")
+            .arg(split_flag)
+            .arg("-t")
+            .arg(target_pane)
+            .arg("-P")
+            .arg("-F")
+            .arg("#{pane_id}");
+
+        if let Some(p) = path {
+            cmd.arg("-c").arg(p);
+        }
+
+        if let Some(pct) = percentage {
+            cmd.arg("-p").arg(pct.to_string());
+        }
+
+        let output = cmd.output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(first_line) = stdout.lines().next() {
+                Ok(first_line.to_string())
+            } else {
+                Err(TsmError::TmuxCommand(
+                    "No pane ID returned from split-window".to_string(),
+                ))
+            }
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Resize a pane to a percentage of the window height
+    pub fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("resize-pane")
+            .arg("-t")
+            .arg(pane_id)
+            .arg("-y")
+            .arg(format!("{}%", percentage))
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Resize a pane to a percentage of the window width
+    pub fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("resize-pane")
+            .arg("-t")
+            .arg(pane_id)
+            .arg("-x")
+            .arg(format!("{}%", percentage))
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn send_keys(&self, pane_id: &str, command: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("send-keys")
+            .arg("-t")
+            .arg(pane_id)
+            .arg(command)
+            .arg("C-m")
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn select_pane(&self, pane_id: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("select-pane")
+            .arg("-t")
+            .arg(pane_id)
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn list_panes(&self, session: &str, window_index: usize) -> Result<Vec<String>> {
+        let output = self
+            .tmux_cmd()
+            .arg("list-panes")
+            .arg("-t")
+            .arg(format!("{}:{}", session, window_index))
+            .arg("-F")
+            .arg("#{pane_id}")
+            .output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let panes: Vec<String> = stdout.lines().map(|line| line.to_string()).collect();
+            Ok(panes)
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn get_current_window_index(&self, session: &str) -> Result<usize> {
+        let output = self
+            .tmux_cmd()
+            .arg("display-message")
+            .arg("-p")
+            .arg("-t")
+            .arg(session)
+            .arg("#{window_index}")
+            .output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let index_str = stdout.trim();
+
+            index_str.parse::<usize>().map_err(|_| {
+                TsmError::TmuxCommand("Failed to parse current window index".to_string())
+            })
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
     pub fn current_session(&self) -> Result<String> {
         let output = self
             .tmux_cmd()
@@ -84,6 +325,26 @@ impl TmuxClient {
         windows
     }
 
+    pub fn create_session_detached(&self, name: &str, path: &std::path::Path) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("new-session")
+            .arg("-d")
+            .arg("-s")
+            .arg(name)
+            .arg("-c")
+            .arg(path)
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
     pub fn new_session(&self, name: String, path: String) -> Result<()> {
         let output = self
             .tmux_cmd()
@@ -101,6 +362,23 @@ impl TmuxClient {
             }
 
             self.attach_session(&name)
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    pub fn select_window(&self, session: &str, window_index: usize) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("select-window")
+            .arg("-t")
+            .arg(format!("{}:{}", session, window_index))
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
         } else {
             Err(TsmError::TmuxCommand(
                 String::from_utf8_lossy(&output.stderr).to_string(),

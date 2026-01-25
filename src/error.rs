@@ -23,6 +23,18 @@ pub enum TsmError {
 
     #[error("{0}")]
     InvalidArgument(String),
+
+    #[error("TOML deserialization error: {0}")]
+    TomlDeserialization(#[from] toml::de::Error),
+
+    #[error("Workspace '{0}' not found")]
+    WorkspaceNotFound(String),
+
+    #[error("No workspaces found")]
+    NoWorkspacesFound,
+
+    #[error("Workspace '{0}' already exists")]
+    WorkspaceAlreadyExists(String),
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;

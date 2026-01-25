@@ -10,5 +10,6 @@ pub mod swap;
 pub mod switch;
 pub mod switch_windows;
 mod utils;
+pub mod workspace;
 
 pub use commands::Cli;

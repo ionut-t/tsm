@@ -56,8 +56,7 @@ impl NewCommand {
         };
 
         let expanded_path = if path.starts_with('~') {
-            let home = std::env::home_dir()
-                .ok_or(crate::error::TsmError::HomeDirectoryNotFound)?;
+            let home = std::env::home_dir().ok_or(crate::error::TsmError::HomeDirectoryNotFound)?;
             path.replacen('~', &home.to_string_lossy(), 1)
         } else if path == "." {
             std::env::current_dir()?.to_string_lossy().to_string()

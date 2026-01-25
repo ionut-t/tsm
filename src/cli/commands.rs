@@ -5,7 +5,7 @@ use crate::{
         kill::KillCommand, last_session::LastSessionCommand, last_window::LastWindowCommand,
         move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
         rename::RenameCommand, swap::SwapWindowCommand, switch::SwitchCommand,
-        switch_windows::SwitchWindowCommand,
+        switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
     },
     error::Result,
     tmux::TmuxClient,
@@ -63,7 +63,12 @@ pub enum Commands {
     MoveWindow(MoveWindowCommand),
 
     /// Swap two windows in the same session
+    #[command(alias = "sww")]
     SwapWindow(SwapWindowCommand),
+
+    /// Workspace
+    #[command(alias = "ws")]
+    Workspace(WorkspaceCommand),
 }
 
 impl Cli {
@@ -79,6 +84,7 @@ impl Cli {
             Commands::Record(cmd) => cmd.run(&client),
             Commands::MoveWindow(cmd) => cmd.run(&client),
             Commands::SwapWindow(cmd) => cmd.run(&client),
+            Commands::Workspace(cmd) => cmd.run(&client),
         }
     }
 }

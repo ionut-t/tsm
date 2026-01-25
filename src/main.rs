@@ -4,6 +4,7 @@ mod fzf;
 mod history;
 mod paths;
 mod tmux;
+mod workspace;
 mod zoxide;
 
 use clap::Parser;
@@ -15,10 +16,7 @@ fn main() -> error::Result<()> {
     let client = TmuxClient::new();
 
     if let Err(e) = cli.run(client) {
-        let error_client = TmuxClient::new();
-        let _ = error_client.display_message(&format!("Error: {}", e));
-
-        return Err(e);
+        return TmuxClient::new().display_message(&format!("Error: {}", e));
     }
 
     Ok(())

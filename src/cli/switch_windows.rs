@@ -1,7 +1,7 @@
 use crate::cli::utils::PREVIEW_CMD;
 use crate::error::Result;
 use crate::history::WindowHistory;
-use crate::paths;
+use crate::history::paths;
 use crate::{fzf::FzfPicker, tmux::TmuxClient};
 
 /// Switches to a window via interactive selection.

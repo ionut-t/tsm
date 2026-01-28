@@ -1,4 +1,8 @@
-use crate::{error::Result, history::WindowHistory, paths, tmux::TmuxClient};
+use crate::{
+    error::Result,
+    history::{WindowHistory, paths},
+    tmux::TmuxClient,
+};
 
 /// Records the current window access in the history file.
 ///

@@ -3,8 +3,7 @@ use crate::{
     cli::utils::{PREVIEW_CMD, sort_windows_by_history},
     error::{Result, TsmError},
     fzf::FzfPicker,
-    history::WindowHistory,
-    paths,
+    history::{WindowHistory, paths},
 };
 
 /// Moves a window from one session to another.

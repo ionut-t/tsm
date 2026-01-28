@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::history::WindowHistory;
-use crate::paths;
+use crate::history::paths;
 use crate::tmux::TmuxClient;
 
 use super::utils::{sort_windows_by_history, switch_to_window};

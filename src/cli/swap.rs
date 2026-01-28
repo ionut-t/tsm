@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::error::TsmError;
 use crate::history::WindowHistory;
-use crate::paths;
+use crate::history::paths;
 use crate::tmux::TmuxClient;
 
 /// Swaps the positions of two windows within the current session.

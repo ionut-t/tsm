@@ -2,7 +2,6 @@ mod cli;
 mod error;
 mod fzf;
 mod history;
-mod paths;
 mod tmux;
 mod workspace;
 mod zoxide;

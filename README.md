@@ -105,6 +105,9 @@ Workspaces let you define session layouts in TOML files. Store them in `~/.confi
 name = "myproject"
 root = "~/code/myproject"
 
+[env]
+NODE_ENV = "development"
+
 [[window]]
 name = "code"
 focus = true
@@ -117,6 +120,9 @@ focus = true
 
 [[window]]
 name = "servers"
+
+[window.env]
+PORT = "3000"
 
 [[window.row]]
 height = 70
@@ -135,6 +141,8 @@ command = "lazygit"
 ```
 
 This creates a session with two windows: one for coding, one split into rows for running servers. Yes, you could just type these commands manually. But where's the fun in that?
+
+Environment variables cascade down and can be overridden at each level: session `[env]` applies everywhere, window `[window.env]` applies to that window's panes, and `[window.row.pane.env]` applies to a single pane.
 
 **Workspace config location priority:**
 

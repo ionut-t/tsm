@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::error::Result;
 use serde::Deserialize;
 
@@ -8,6 +10,8 @@ pub struct Workspace {
     pub name: String,
     pub root: Option<String>,
     #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
     pub window: Vec<Window>,
 }
 
@@ -17,12 +21,13 @@ pub struct Window {
     #[serde(default)]
     pub focus: bool,
     #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
     pub row: Vec<Row>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Row {
-    /// Height as percentage (1-100). If not specified, rows split evenly.
     pub height: Option<u32>,
     #[serde(default)]
     pub pane: Vec<Pane>,
@@ -31,10 +36,11 @@ pub struct Row {
 #[derive(Debug, Deserialize)]
 pub struct Pane {
     pub command: Option<String>,
-    /// Width as percentage (1-100). If not specified, panes split evenly.
     pub width: Option<u32>,
     #[serde(default)]
     pub focus: bool,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 impl Workspace {

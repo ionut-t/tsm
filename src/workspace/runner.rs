@@ -1,16 +1,7 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{error::Result, tmux::TmuxClient, workspace::config::Workspace};
-
-fn expand_tilde(path: &str) -> PathBuf {
-    if path.starts_with('~')
-        && let Some(home) = dirs::home_dir()
-    {
-        return PathBuf::from(path.replacen('~', &home.to_string_lossy(), 1));
-    }
-
-    PathBuf::from(path)
-}
 
 pub struct WorkspaceRunner<'a> {
     client: &'a TmuxClient,
@@ -96,12 +87,21 @@ impl<'a> WorkspaceRunner<'a> {
                 }
             }
 
+            let window_env: HashMap<String, String>;
+            let effective_env = if window.env.is_empty() {
+                &self.workspace.env
+            } else {
+                window_env = merge_env(&self.workspace.env, &window.env);
+                &window_env
+            };
+
             // Split each row horizontally for its panes
             for (row_idx, row) in window.row.iter().enumerate() {
                 self.create_row_panes(
                     &row_first_panes[row_idx],
                     &row.pane,
                     &path,
+                    effective_env,
                     &mut focus_pane,
                 )?;
             }
@@ -124,6 +124,7 @@ impl<'a> WorkspaceRunner<'a> {
         first_pane_id: &str,
         panes: &[crate::workspace::config::Pane],
         path: &Path,
+        inherited_env: &HashMap<String, String>,
         focus_pane: &mut Option<String>,
     ) -> Result<()> {
         if panes.is_empty() {
@@ -148,9 +149,22 @@ impl<'a> WorkspaceRunner<'a> {
             }
         }
 
-        // Send commands and track focus
+        // Send env vars and commands, track focus
         for (pane_idx, pane) in panes.iter().enumerate() {
             if let Some(pane_id) = pane_ids.get(pane_idx) {
+                let pane_env;
+                let effective_env = if pane.env.is_empty() {
+                    inherited_env
+                } else {
+                    pane_env = merge_env(inherited_env, &pane.env);
+                    &pane_env
+                };
+
+                if !effective_env.is_empty() {
+                    let export = build_export_command(effective_env);
+                    self.client.send_keys(pane_id, &export)?;
+                }
+
                 if let Some(cmd) = &pane.command {
                     self.client.send_keys(pane_id, cmd)?;
                 }
@@ -170,4 +184,35 @@ impl<'a> WorkspaceRunner<'a> {
             self.client.attach_session(&self.session_name)
         }
     }
+}
+
+fn merge_env(
+    base: &HashMap<String, String>,
+    overrides: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut merged = base.clone();
+    merged.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+    merged
+}
+
+fn build_export_command(env: &HashMap<String, String>) -> String {
+    let mut parts: Vec<String> = env
+        .iter()
+        .map(|(k, v)| {
+            let escaped = v.replace('\'', "'\\''");
+            format!("{}='{}'", k, escaped)
+        })
+        .collect();
+    parts.sort();
+    format!("export {}", parts.join(" "))
+}
+
+fn expand_tilde(path: &str) -> PathBuf {
+    if path.starts_with('~')
+        && let Some(home) = dirs::home_dir()
+    {
+        return PathBuf::from(path.replacen('~', &home.to_string_lossy(), 1));
+    }
+
+    PathBuf::from(path)
 }

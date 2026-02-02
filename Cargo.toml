@@ -1,6 +1,6 @@
 [package]
 name = "tsm"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["Ionut Traistaru"]
 description = "A CLI tool for tmux session management with fuzzy finding and smart history"

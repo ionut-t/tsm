@@ -9,7 +9,6 @@ use crate::workspace::runner::WorkspaceRunner;
 use crate::workspace::template;
 
 #[derive(clap::Parser, Debug)]
-#[command(name = "workspace", visible_alias = "ws")]
 pub struct WorkspaceCommand {
     /// Workspace name (optional - shows picker if omitted)
     name: Option<String>,

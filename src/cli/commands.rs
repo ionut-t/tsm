@@ -2,10 +2,10 @@ use clap::{Parser, Subcommand, command};
 
 use crate::{
     cli::{
-        kill::KillCommand, last_session::LastSessionCommand, last_window::LastWindowCommand,
-        move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
-        rename::RenameCommand, swap::SwapWindowCommand, switch::SwitchCommand,
-        switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
+        completions::CompletionsCommand, kill::KillCommand, last_session::LastSessionCommand,
+        last_window::LastWindowCommand, move_window::MoveWindowCommand, new::NewCommand,
+        record::RecordCommand, rename::RenameCommand, swap::SwapWindowCommand,
+        switch::SwitchCommand, switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
     },
     error::Result,
     tmux::TmuxClient,
@@ -55,7 +55,6 @@ pub enum Commands {
     LastWindow(LastWindowCommand),
 
     /// Record window history
-    #[command(alias = "record")]
     Record(RecordCommand),
 
     /// Move window to another session
@@ -69,6 +68,9 @@ pub enum Commands {
     /// Workspace
     #[command(alias = "ws")]
     Workspace(WorkspaceCommand),
+
+    /// Generate shell completions
+    Completions(CompletionsCommand),
 }
 
 impl Cli {
@@ -85,6 +87,10 @@ impl Cli {
             Commands::MoveWindow(cmd) => cmd.run(&client),
             Commands::SwapWindow(cmd) => cmd.run(&client),
             Commands::Workspace(cmd) => cmd.run(&client),
+            Commands::Completions(cmd) => {
+                cmd.run();
+                Ok(())
+            }
         }
     }
 }

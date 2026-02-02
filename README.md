@@ -186,6 +186,24 @@ set-hook -g after-select-window 'run-shell "tsm record"'
 
 The `after-select-window` hook tracks all window switches (even native tmux commands like `prefix+w` or `prefix+n`), so `last-window` and `last-session` actually know where you've been. Without it, only switches through tsm get tracked, which is... less useful.
 
+## Shell Completions
+
+```bash
+# Bash
+tsm completions bash > ~/.local/share/bash-completion/completions/tsm
+
+# Zsh (with zinit)
+tsm completions zsh > "${ZINIT[COMPLETIONS_DIR]}/_tsm"
+
+# Zsh (manual)
+tsm completions zsh > ~/.zfunc/_tsm  # ensure ~/.zfunc is in the fpath
+
+# Fish
+tsm completions fish > ~/.config/fish/completions/tsm.fish
+```
+
+Restart shell or run `exec $SHELL` to activate.
+
 ## License
 
 [MIT](LICENSE)

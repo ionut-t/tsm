@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod completions;
 pub mod kill;
 pub mod last_session;
 pub mod last_window;

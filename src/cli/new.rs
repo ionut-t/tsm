@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::cli::utils::PREVIEW_CMD;
+use crate::cli::utils::PREVIEW_LS_TREE_CMD;
 use crate::error::Result;
 use crate::fzf::FzfPicker;
 use crate::tmux::TmuxClient;
@@ -43,7 +43,11 @@ impl NewCommand {
         } else {
             let dirs = zoxide::query_directories()?;
 
-            let preview_cmd = if self.preview { PREVIEW_CMD } else { "" };
+            let preview_cmd = if self.preview {
+                PREVIEW_LS_TREE_CMD
+            } else {
+                ""
+            };
 
             let picker = FzfPicker::new()
                 .with_prompt(&self.prompt)

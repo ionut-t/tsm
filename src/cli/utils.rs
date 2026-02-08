@@ -13,6 +13,10 @@ else
 fi
 "#;
 
+pub const PREVIEW_LS_TREE_CMD: &str = r#"
+dir={}; dir="${dir/#\~/$HOME}"; command -v eza >/dev/null && eza --color=always --icons=always --tree --level=1 --group-directories-first "$dir" || ls "$dir"
+"#;
+
 /// Sort windows by access time (most recent first) and return indexed list
 pub fn sort_windows_by_history(
     windows: Vec<Window>,

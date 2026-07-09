@@ -1,5 +1,6 @@
 use super::Window;
 use crate::error::{Result, TsmError};
+use std::collections::HashMap;
 use std::process::Command;
 
 pub struct TmuxClient;
@@ -13,6 +14,17 @@ impl TmuxClient {
         Command::new("tmux")
     }
 
+    /// Append `-e KEY=VALUE` arguments for each variable so tmux spawns the new
+    /// window/pane with that environment. Args go straight to exec, so no shell
+    /// quoting is required. Sorted for deterministic command construction.
+    fn add_env_args(cmd: &mut Command, env: &HashMap<String, String>) {
+        let mut vars: Vec<(&String, &String)> = env.iter().collect();
+        vars.sort();
+        for (key, value) in vars {
+            cmd.arg("-e").arg(format!("{}={}", key, value));
+        }
+    }
+
     pub fn is_inside_tmux(&self) -> bool {
         std::env::var("TMUX").is_ok()
     }
@@ -22,6 +34,7 @@ impl TmuxClient {
         session: &str,
         name: Option<&str>,
         path: Option<&std::path::Path>,
+        env: &HashMap<String, String>,
     ) -> Result<usize> {
         let mut cmd = self.tmux_cmd();
         cmd.arg("new-window")
@@ -39,6 +52,8 @@ impl TmuxClient {
         if let Some(p) = path {
             cmd.arg("-c").arg(p);
         }
+
+        Self::add_env_args(&mut cmd, env);
 
         let output = cmd.output()?;
 
@@ -81,8 +96,9 @@ impl TmuxClient {
         target_pane: &str,
         path: Option<&std::path::Path>,
         percentage: Option<u32>,
+        env: &HashMap<String, String>,
     ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-h", path, percentage)
+        self.split_pane_internal(target_pane, "-h", path, percentage, env)
     }
 
     /// Split a pane vertically (creates panes stacked top/bottom)
@@ -91,8 +107,9 @@ impl TmuxClient {
         target_pane: &str,
         path: Option<&std::path::Path>,
         percentage: Option<u32>,
+        env: &HashMap<String, String>,
     ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-v", path, percentage)
+        self.split_pane_internal(target_pane, "-v", path, percentage, env)
     }
 
     fn split_pane_internal(
@@ -101,6 +118,7 @@ impl TmuxClient {
         split_flag: &str,
         path: Option<&std::path::Path>,
         percentage: Option<u32>,
+        env: &HashMap<String, String>,
     ) -> Result<String> {
         let mut cmd = self.tmux_cmd();
         cmd.arg("split-window")
@@ -118,6 +136,8 @@ impl TmuxClient {
         if let Some(pct) = percentage {
             cmd.arg("-p").arg(pct.to_string());
         }
+
+        Self::add_env_args(&mut cmd, env);
 
         let output = cmd.output()?;
 
@@ -325,16 +345,54 @@ impl TmuxClient {
         windows
     }
 
-    pub fn create_session_detached(&self, name: &str, path: &std::path::Path) -> Result<()> {
-        let output = self
-            .tmux_cmd()
-            .arg("new-session")
+    pub fn create_session_detached(
+        &self,
+        name: &str,
+        path: &std::path::Path,
+        env: &HashMap<String, String>,
+    ) -> Result<()> {
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("new-session")
             .arg("-d")
             .arg("-s")
             .arg(name)
             .arg("-c")
-            .arg(path)
-            .output()?;
+            .arg(path);
+
+        Self::add_env_args(&mut cmd, env);
+
+        let output = cmd.output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Restart a pane's shell with a new environment. Used to give a window's
+    /// initial pane its window/pane-level env without leaking those overrides
+    /// into the session environment (as `new-session -e` would). `-k` kills the
+    /// existing idle shell; `-e` is process-scoped, like `new-window`.
+    pub fn respawn_pane(
+        &self,
+        pane_id: &str,
+        path: &std::path::Path,
+        env: &HashMap<String, String>,
+    ) -> Result<()> {
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("respawn-pane")
+            .arg("-k")
+            .arg("-t")
+            .arg(pane_id)
+            .arg("-c")
+            .arg(path);
+
+        Self::add_env_args(&mut cmd, env);
+
+        let output = cmd.output()?;
 
         if output.status.success() {
             Ok(())

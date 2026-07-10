@@ -9,6 +9,7 @@ pub struct FzfPicker {
     preview_window: String,
     delimiter: Option<String>,
     with_nth: Option<String>,
+    nth: Option<String>,
 }
 
 impl FzfPicker {
@@ -19,6 +20,7 @@ impl FzfPicker {
             preview_window: "right:60%".to_string(),
             delimiter: None,
             with_nth: None,
+            nth: None,
         }
     }
 
@@ -42,6 +44,12 @@ impl FzfPicker {
         self
     }
 
+    /// Restricts the fields fzf searches against (fzf's `--nth`).
+    pub fn with_search_nth(mut self, nth: &str) -> Self {
+        self.nth = Some(nth.to_string());
+        self
+    }
+
     pub fn pick(&self, items: &[String]) -> Result<Option<String>> {
         let mut fzf = Command::new("fzf");
         fzf.arg("--ansi").arg(format!("--prompt={}", self.prompt));
@@ -52,6 +60,10 @@ impl FzfPicker {
 
         if let Some(nth) = &self.with_nth {
             fzf.arg("--with-nth").arg(nth);
+        }
+
+        if let Some(nth) = &self.nth {
+            fzf.arg("--nth").arg(nth);
         }
 
         if let Some(preview_cmd) = &self.preview_command {

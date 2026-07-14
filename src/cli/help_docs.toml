@@ -1,0 +1,744 @@
+# Curated tldr-style docs for the `tsm help` command palette.
+#
+# `tsm` entries only need examples (descriptions come from clap).
+# `tmux` entries provide a short human `description` (the list column) plus
+# examples (the preview). Argument syntax is pulled live from tmux, so it is
+# not duplicated here.
+
+# ---------------------------------------------------------------------------
+# tsm commands
+# ---------------------------------------------------------------------------
+
+[[tsm]]
+name = "new"
+examples = [
+  { info = "Create a session from a picked directory", cmd = "tsm new" },
+  { info = "Named session at a specific path", cmd = "tsm new -n api -p ~/code/api" },
+  { info = "Skip the success message", cmd = "tsm new -q" },
+]
+
+[[tsm]]
+name = "kill"
+examples = [
+  { info = "Pick a session to kill", cmd = "tsm kill" },
+  { info = "Kill a specific session", cmd = "tsm kill -s myproject" },
+  { info = "Kill all sessions", cmd = "tsm kill -a" },
+]
+
+[[tsm]]
+name = "rename"
+examples = [
+  { info = "Rename the current session", cmd = "tsm rename -n newname" },
+  { info = "Rename a specific session", cmd = "tsm rename -c oldname -n newname" },
+]
+
+[[tsm]]
+name = "switch"
+examples = [
+  { info = "Pick a session to switch to", cmd = "tsm switch" },
+  { info = "Switch directly by name", cmd = "tsm switch -n myproject" },
+]
+
+[[tsm]]
+name = "switch-window"
+examples = [
+  { info = "Pick a window across all sessions", cmd = "tsm switch-window" },
+  { info = "Show a preview of window contents", cmd = "tsm switch-window --preview" },
+]
+
+[[tsm]]
+name = "last-session"
+examples = [
+  { info = "Toggle to the last active session", cmd = "tsm last-session" },
+]
+
+[[tsm]]
+name = "last-window"
+examples = [
+  { info = "Toggle to the last active window", cmd = "tsm last-window" },
+  { info = "Restrict to the current session", cmd = "tsm last-window -c" },
+]
+
+[[tsm]]
+name = "record"
+examples = [
+  { info = "Record the current window's access time", cmd = "tsm record" },
+  { info = "Wire it into a tmux hook", cmd = "tmux set-hook -g after-select-window 'run-shell tsm record'" },
+]
+
+[[tsm]]
+name = "move-window"
+examples = [
+  { info = "Interactively move a window to another session", cmd = "tsm move-window" },
+  { info = "Move the current window to a session", cmd = "tsm move-window -t backend" },
+  { info = "Move a specific window", cmd = "tsm move-window -f frontend:3 -t backend" },
+]
+
+[[tsm]]
+name = "swap-window"
+examples = [
+  { info = "Swap the current window with window 3", cmd = "tsm swap-window -t 3" },
+  { info = "Swap two specific windows", cmd = "tsm swap-window -s 2 -t 5" },
+]
+
+[[tsm]]
+name = "workspace"
+examples = [
+  { info = "Pick and launch a workspace", cmd = "tsm workspace" },
+  { info = "Launch a specific workspace", cmd = "tsm workspace myproject" },
+  { info = "Create a new workspace", cmd = "tsm workspace new myproject" },
+]
+
+[[tsm]]
+name = "completions"
+examples = [
+  { info = "Generate zsh completions", cmd = "tsm completions zsh" },
+  { info = "Install them for zsh", cmd = "tsm completions zsh > ~/.zsh/completions/_tsm" },
+]
+
+[[tsm]]
+name = "help"
+examples = [
+  { info = "Browse all tsm and tmux commands", cmd = "tsm help" },
+  { info = "Bind it to a floating tmux popup", cmd = "bind ? display-popup -E 'tsm help'" },
+]
+
+# ---------------------------------------------------------------------------
+# tmux commands
+# ---------------------------------------------------------------------------
+
+[[tmux]]
+name = "attach-session"
+description = "Attach to an existing session"
+examples = [
+  { info = "Attach to the most recent session", cmd = "tmux attach" },
+  { info = "Attach to a named session", cmd = "tmux attach -t work" },
+  { info = "Detach other clients when attaching", cmd = "tmux attach -d -t work" },
+]
+
+[[tmux]]
+name = "bind-key"
+description = "Bind a key to a command"
+examples = [
+  { info = "Bind prefix + r to reload the config", cmd = "tmux bind r source-file ~/.tmux.conf" },
+  { info = "Bind a key without the prefix (root table)", cmd = "tmux bind -n M-Left select-pane -L" },
+]
+
+[[tmux]]
+name = "break-pane"
+description = "Move the current pane into its own window"
+examples = [
+  { info = "Break the pane into a new window", cmd = "tmux break-pane" },
+  { info = "Break it without switching to it", cmd = "tmux break-pane -d" },
+]
+
+[[tmux]]
+name = "capture-pane"
+description = "Capture a pane's contents to a buffer"
+examples = [
+  { info = "Capture the visible pane to a buffer", cmd = "tmux capture-pane" },
+  { info = "Print the pane contents to stdout", cmd = "tmux capture-pane -p" },
+  { info = "Include the full scrollback history", cmd = "tmux capture-pane -p -S -" },
+]
+
+[[tmux]]
+name = "choose-buffer"
+description = "Interactively choose a paste buffer"
+examples = [{ info = "Open the buffer chooser", cmd = "tmux choose-buffer" }]
+
+[[tmux]]
+name = "choose-client"
+description = "Interactively choose a client"
+examples = [{ info = "Open the client chooser", cmd = "tmux choose-client" }]
+
+[[tmux]]
+name = "choose-tree"
+description = "Browse sessions and windows in a tree"
+examples = [
+  { info = "Open the session/window tree", cmd = "tmux choose-tree" },
+  { info = "Start collapsed to sessions only", cmd = "tmux choose-tree -s" },
+]
+
+[[tmux]]
+name = "clear-history"
+description = "Clear a pane's scrollback history"
+examples = [
+  { info = "Clear the current pane's history", cmd = "tmux clear-history" },
+  { info = "Clear a specific pane", cmd = "tmux clear-history -t 1" },
+]
+
+[[tmux]]
+name = "clear-prompt-history"
+description = "Clear the command-prompt history"
+examples = [
+  { info = "Clear all prompt history", cmd = "tmux clear-prompt-history" },
+]
+
+[[tmux]]
+name = "clock-mode"
+description = "Display a large clock in the pane"
+examples = [{ info = "Show the clock", cmd = "tmux clock-mode" }]
+
+[[tmux]]
+name = "command-prompt"
+description = "Open an interactive command prompt"
+examples = [
+  { info = "Prompt for input then run a command", cmd = "tmux command-prompt 'rename-window %%'" },
+  { info = "Prompt with a custom label", cmd = "tmux command-prompt -p 'New name:' 'rename-window %%'" },
+]
+
+[[tmux]]
+name = "confirm-before"
+description = "Ask for confirmation before a command"
+examples = [
+  { info = "Confirm before killing the window", cmd = "tmux confirm-before kill-window" },
+  { info = "Use a custom prompt", cmd = "tmux confirm-before -p 'Kill pane? (y/n)' kill-pane" },
+]
+
+[[tmux]]
+name = "copy-mode"
+description = "Enter copy mode to scroll and select text"
+examples = [
+  { info = "Enter copy mode", cmd = "tmux copy-mode" },
+  { info = "Enter and scroll up one page", cmd = "tmux copy-mode -u" },
+]
+
+[[tmux]]
+name = "customize-mode"
+description = "Browse and change options interactively"
+examples = [
+  { info = "Open the options customizer", cmd = "tmux customize-mode" },
+]
+
+[[tmux]]
+name = "delete-buffer"
+description = "Delete a paste buffer"
+examples = [
+  { info = "Delete the most recent buffer", cmd = "tmux delete-buffer" },
+  { info = "Delete a named buffer", cmd = "tmux delete-buffer -b buffer0" },
+]
+
+[[tmux]]
+name = "detach-client"
+description = "Detach a client from its session"
+examples = [
+  { info = "Detach the current client", cmd = "tmux detach" },
+  { info = "Detach all other clients", cmd = "tmux detach -a" },
+]
+
+[[tmux]]
+name = "display-menu"
+description = "Show an interactive menu"
+examples = [
+  { info = "Show a menu with two actions", cmd = "tmux display-menu -T Actions 'New window' n new-window Kill k kill-window" },
+]
+
+[[tmux]]
+name = "display-message"
+description = "Show a message in the status line"
+examples = [
+  { info = "Print a message", cmd = "tmux display-message Hello" },
+  { info = "Print a format to stdout", cmd = "tmux display-message -p '#{session_name}'" },
+]
+
+[[tmux]]
+name = "display-popup"
+description = "Open a popup running a command"
+examples = [
+  { info = "Open a popup shell", cmd = "tmux display-popup" },
+  { info = "Run a command in a popup", cmd = "tmux display-popup -E htop" },
+  { info = "Sized, titled popup", cmd = "tmux display-popup -w 80% -h 80% -T ' Logs ' -E 'tail -f app.log'" },
+]
+
+[[tmux]]
+name = "display-panes"
+description = "Show pane numbers for quick selection"
+examples = [{ info = "Show pane numbers", cmd = "tmux display-panes" }]
+
+[[tmux]]
+name = "find-window"
+description = "Search windows by name, title, or content"
+examples = [
+  { info = "Find windows matching text", cmd = "tmux find-window vim" },
+]
+
+[[tmux]]
+name = "has-session"
+description = "Test whether a session exists"
+examples = [
+  { info = "Check for a session (via exit code)", cmd = "tmux has-session -t work" },
+]
+
+[[tmux]]
+name = "if-shell"
+description = "Run a command based on a shell test"
+examples = [
+  { info = "Run a command only if a test passes", cmd = "tmux if-shell 'test -f ~/.a' 'display-message found'" },
+]
+
+[[tmux]]
+name = "join-pane"
+description = "Move a pane into another window"
+examples = [
+  { info = "Join the marked pane into this window", cmd = "tmux join-pane" },
+  { info = "Join a pane below the target", cmd = "tmux join-pane -v -s 2 -t 1" },
+]
+
+[[tmux]]
+name = "kill-pane"
+description = "Close a pane"
+examples = [
+  { info = "Kill the current pane", cmd = "tmux kill-pane" },
+  { info = "Kill all panes except the current one", cmd = "tmux kill-pane -a" },
+]
+
+[[tmux]]
+name = "kill-server"
+description = "Stop the tmux server and every session"
+examples = [{ info = "Kill the server", cmd = "tmux kill-server" }]
+
+[[tmux]]
+name = "kill-session"
+description = "Destroy a session"
+examples = [
+  { info = "Kill the current session", cmd = "tmux kill-session" },
+  { info = "Kill a named session", cmd = "tmux kill-session -t old" },
+  { info = "Kill every session but the current", cmd = "tmux kill-session -a" },
+]
+
+[[tmux]]
+name = "kill-window"
+description = "Close a window"
+examples = [
+  { info = "Kill the current window", cmd = "tmux kill-window" },
+  { info = "Kill every window except the current", cmd = "tmux kill-window -a" },
+]
+
+[[tmux]]
+name = "last-pane"
+description = "Switch to the previously active pane"
+examples = [{ info = "Toggle to the last pane", cmd = "tmux last-pane" }]
+
+[[tmux]]
+name = "last-window"
+description = "Switch to the previously active window"
+examples = [{ info = "Toggle to the last window", cmd = "tmux last-window" }]
+
+[[tmux]]
+name = "link-window"
+description = "Link a window into another session"
+examples = [
+  { info = "Link a window into another session", cmd = "tmux link-window -s work:1 -t misc" },
+]
+
+[[tmux]]
+name = "list-buffers"
+description = "List paste buffers"
+examples = [{ info = "List all buffers", cmd = "tmux list-buffers" }]
+
+[[tmux]]
+name = "list-clients"
+description = "List connected clients"
+examples = [{ info = "List all clients", cmd = "tmux list-clients" }]
+
+[[tmux]]
+name = "list-commands"
+description = "List all tmux commands and their syntax"
+examples = [
+  { info = "List every command", cmd = "tmux list-commands" },
+  { info = "Show the syntax for one command", cmd = "tmux list-commands split-window" },
+]
+
+[[tmux]]
+name = "list-keys"
+description = "List key bindings"
+examples = [
+  { info = "List all key bindings", cmd = "tmux list-keys" },
+  { info = "List bindings in the copy-mode table", cmd = "tmux list-keys -T copy-mode" },
+]
+
+[[tmux]]
+name = "list-panes"
+description = "List panes"
+examples = [
+  { info = "List panes in the current window", cmd = "tmux list-panes" },
+  { info = "List panes across the session", cmd = "tmux list-panes -s" },
+]
+
+[[tmux]]
+name = "list-sessions"
+description = "List sessions"
+examples = [{ info = "List all sessions", cmd = "tmux list-sessions" }]
+
+[[tmux]]
+name = "list-windows"
+description = "List windows"
+examples = [
+  { info = "List windows in the current session", cmd = "tmux list-windows" },
+  { info = "List windows across all sessions", cmd = "tmux list-windows -a" },
+]
+
+[[tmux]]
+name = "load-buffer"
+description = "Load a file into a paste buffer"
+examples = [
+  { info = "Load a file into a buffer", cmd = "tmux load-buffer notes.txt" },
+]
+
+[[tmux]]
+name = "lock-client"
+description = "Lock a client"
+examples = [{ info = "Lock the current client", cmd = "tmux lock-client" }]
+
+[[tmux]]
+name = "lock-server"
+description = "Lock every client"
+examples = [{ info = "Lock the server", cmd = "tmux lock-server" }]
+
+[[tmux]]
+name = "lock-session"
+description = "Lock all clients of a session"
+examples = [{ info = "Lock the current session", cmd = "tmux lock-session" }]
+
+[[tmux]]
+name = "move-pane"
+description = "Move a pane into another window"
+examples = [
+  { info = "Move a pane below the target", cmd = "tmux move-pane -v -s 2 -t 1" },
+]
+
+[[tmux]]
+name = "move-window"
+description = "Move a window to another index or session"
+examples = [
+  { info = "Move the window to index 0", cmd = "tmux move-window -t 0" },
+  { info = "Renumber windows to close gaps", cmd = "tmux move-window -r" },
+]
+
+[[tmux]]
+name = "new-pane"
+description = "Create a new pane in the current window"
+examples = [
+  { info = "Create a pane to the right", cmd = "tmux new-pane -h" },
+  { info = "Create a pane below", cmd = "tmux new-pane -v" },
+]
+
+[[tmux]]
+name = "new-session"
+description = "Create a new session"
+examples = [
+  { info = "Create a session", cmd = "tmux new-session" },
+  { info = "Create a detached, named session", cmd = "tmux new-session -d -s work" },
+  { info = "Create it, or attach if it exists", cmd = "tmux new-session -A -s work" },
+]
+
+[[tmux]]
+name = "new-window"
+description = "Create a new window"
+examples = [
+  { info = "Create a window", cmd = "tmux new-window" },
+  { info = "Named window running a command", cmd = "tmux new-window -n logs 'tail -f app.log'" },
+  { info = "Create it without switching to it", cmd = "tmux new-window -d" },
+]
+
+[[tmux]]
+name = "next-layout"
+description = "Cycle to the next window layout"
+examples = [{ info = "Switch to the next layout", cmd = "tmux next-layout" }]
+
+[[tmux]]
+name = "next-window"
+description = "Switch to the next window"
+examples = [{ info = "Go to the next window", cmd = "tmux next-window" }]
+
+[[tmux]]
+name = "paste-buffer"
+description = "Paste a buffer into a pane"
+examples = [
+  { info = "Paste the most recent buffer", cmd = "tmux paste-buffer" },
+  { info = "Paste it and then delete it", cmd = "tmux paste-buffer -d" },
+]
+
+[[tmux]]
+name = "pipe-pane"
+description = "Pipe a pane's output to a shell command"
+examples = [
+  { info = "Log pane output to a file", cmd = "tmux pipe-pane -o 'cat >> pane.log'" },
+  { info = "Stop piping", cmd = "tmux pipe-pane" },
+]
+
+[[tmux]]
+name = "previous-layout"
+description = "Cycle to the previous window layout"
+examples = [
+  { info = "Switch to the previous layout", cmd = "tmux previous-layout" },
+]
+
+[[tmux]]
+name = "previous-window"
+description = "Switch to the previous window"
+examples = [
+  { info = "Go to the previous window", cmd = "tmux previous-window" },
+]
+
+[[tmux]]
+name = "refresh-client"
+description = "Refresh or control a client"
+examples = [
+  { info = "Redraw the client", cmd = "tmux refresh-client" },
+  { info = "Resize to fit the smallest client", cmd = "tmux refresh-client -S" },
+]
+
+[[tmux]]
+name = "rename-session"
+description = "Rename a session"
+examples = [
+  { info = "Rename the current session", cmd = "tmux rename-session newname" },
+  { info = "Rename a specific session", cmd = "tmux rename-session -t old newname" },
+]
+
+[[tmux]]
+name = "rename-window"
+description = "Rename a window"
+examples = [
+  { info = "Rename the current window", cmd = "tmux rename-window build" },
+]
+
+[[tmux]]
+name = "resize-pane"
+description = "Resize a pane"
+examples = [
+  { info = "Grow the pane 5 cells to the right", cmd = "tmux resize-pane -R 5" },
+  { info = "Set an exact width", cmd = "tmux resize-pane -x 80" },
+  { info = "Toggle pane zoom", cmd = "tmux resize-pane -Z" },
+]
+
+[[tmux]]
+name = "resize-window"
+description = "Resize a window"
+examples = [
+  { info = "Set an exact window size", cmd = "tmux resize-window -x 200 -y 50" },
+]
+
+[[tmux]]
+name = "respawn-pane"
+description = "Restart a pane's command"
+examples = [{ info = "Respawn the pane", cmd = "tmux respawn-pane -k" }]
+
+[[tmux]]
+name = "respawn-window"
+description = "Restart a window's command"
+examples = [{ info = "Respawn the window", cmd = "tmux respawn-window -k" }]
+
+[[tmux]]
+name = "rotate-window"
+description = "Rotate the panes within a window"
+examples = [{ info = "Rotate the panes", cmd = "tmux rotate-window" }]
+
+[[tmux]]
+name = "run-shell"
+description = "Run a shell command"
+examples = [
+  { info = "Run a command in the background", cmd = "tmux run-shell -b 'notify-send done'" },
+  { info = "Run a command and show its output", cmd = "tmux run-shell uptime" },
+]
+
+[[tmux]]
+name = "save-buffer"
+description = "Save a paste buffer to a file"
+examples = [
+  { info = "Save the buffer to a file", cmd = "tmux save-buffer out.txt" },
+]
+
+[[tmux]]
+name = "select-layout"
+description = "Apply a named window layout"
+examples = [
+  { info = "Use the tiled layout", cmd = "tmux select-layout tiled" },
+  { info = "Use even horizontal splits", cmd = "tmux select-layout even-horizontal" },
+]
+
+[[tmux]]
+name = "select-pane"
+description = "Select or activate a pane"
+examples = [
+  { info = "Select the pane to the left", cmd = "tmux select-pane -L" },
+  { info = "Mark the current pane", cmd = "tmux select-pane -m" },
+]
+
+[[tmux]]
+name = "select-window"
+description = "Select a window"
+examples = [{ info = "Select window 2", cmd = "tmux select-window -t 2" }]
+
+[[tmux]]
+name = "send-keys"
+description = "Send keystrokes to a pane"
+examples = [
+  { info = "Type a command and run it", cmd = "tmux send-keys 'ls -la' Enter" },
+  { info = "Send a Ctrl-C", cmd = "tmux send-keys C-c" },
+]
+
+[[tmux]]
+name = "send-prefix"
+description = "Send the prefix key to a pane"
+examples = [{ info = "Send the prefix key", cmd = "tmux send-prefix" }]
+
+[[tmux]]
+name = "server-access"
+description = "Manage user access to the server"
+examples = [
+  { info = "Grant a user write access", cmd = "tmux server-access -w alice" },
+]
+
+[[tmux]]
+name = "set-buffer"
+description = "Set the contents of a paste buffer"
+examples = [{ info = "Set a buffer from text", cmd = "tmux set-buffer hello" }]
+
+[[tmux]]
+name = "set-environment"
+description = "Set a session environment variable"
+examples = [
+  { info = "Set a variable for the session", cmd = "tmux set-environment FOO bar" },
+  { info = "Set a global variable", cmd = "tmux set-environment -g FOO bar" },
+]
+
+[[tmux]]
+name = "set-hook"
+description = "Set a hook to run on an event"
+examples = [
+  { info = "Run a command when a window is selected", cmd = "tmux set-hook -g after-select-window 'display-message switched'" },
+]
+
+[[tmux]]
+name = "set-option"
+description = "Set a session or server option"
+examples = [
+  { info = "Enable mouse support", cmd = "tmux set-option -g mouse on" },
+  { info = "Set the prefix key", cmd = "tmux set-option -g prefix C-a" },
+]
+
+[[tmux]]
+name = "set-window-option"
+description = "Set a window option"
+examples = [
+  { info = "Enable window activity monitoring", cmd = "tmux set-window-option -g monitor-activity on" },
+]
+
+[[tmux]]
+name = "show-buffer"
+description = "Show a paste buffer's contents"
+examples = [{ info = "Print the most recent buffer", cmd = "tmux show-buffer" }]
+
+[[tmux]]
+name = "show-environment"
+description = "Show session environment variables"
+examples = [
+  { info = "Show the session environment", cmd = "tmux show-environment" },
+  { info = "Show global variables", cmd = "tmux show-environment -g" },
+]
+
+[[tmux]]
+name = "show-hooks"
+description = "List hooks"
+examples = [{ info = "Show global hooks", cmd = "tmux show-hooks -g" }]
+
+[[tmux]]
+name = "show-messages"
+description = "Show the server message log"
+examples = [
+  { info = "Show recent server messages", cmd = "tmux show-messages" },
+]
+
+[[tmux]]
+name = "show-options"
+description = "Show options"
+examples = [
+  { info = "Show session options", cmd = "tmux show-options" },
+  { info = "Show all global options", cmd = "tmux show-options -g" },
+]
+
+[[tmux]]
+name = "show-prompt-history"
+description = "Show command-prompt history"
+examples = [{ info = "Show prompt history", cmd = "tmux show-prompt-history" }]
+
+[[tmux]]
+name = "show-window-options"
+description = "Show window options"
+examples = [
+  { info = "Show window options", cmd = "tmux show-window-options -g" },
+]
+
+[[tmux]]
+name = "source-file"
+description = "Load a tmux configuration file"
+examples = [
+  { info = "Reload the config", cmd = "tmux source-file ~/.tmux.conf" },
+]
+
+[[tmux]]
+name = "split-window"
+description = "Split the current pane into two"
+examples = [
+  { info = "Split horizontally (side by side)", cmd = "tmux split-window -h" },
+  { info = "Split vertically (top and bottom)", cmd = "tmux split-window -v" },
+  { info = "Split keeping the current directory", cmd = "tmux split-window -h -c '#{pane_current_path}'" },
+]
+
+[[tmux]]
+name = "start-server"
+description = "Start the tmux server"
+examples = [{ info = "Start the server", cmd = "tmux start-server" }]
+
+[[tmux]]
+name = "suspend-client"
+description = "Suspend a client"
+examples = [
+  { info = "Suspend the current client", cmd = "tmux suspend-client" },
+]
+
+[[tmux]]
+name = "swap-pane"
+description = "Swap two panes"
+examples = [
+  { info = "Swap with the pane below", cmd = "tmux swap-pane -D" },
+  { info = "Swap with the marked pane", cmd = "tmux swap-pane" },
+]
+
+[[tmux]]
+name = "swap-window"
+description = "Swap two windows"
+examples = [
+  { info = "Swap window 2 with window 5", cmd = "tmux swap-window -s 2 -t 5" },
+]
+
+[[tmux]]
+name = "switch-client"
+description = "Switch a client to another session"
+examples = [
+  { info = "Switch to a session", cmd = "tmux switch-client -t work" },
+  { info = "Switch to the last session", cmd = "tmux switch-client -l" },
+]
+
+[[tmux]]
+name = "unbind-key"
+description = "Remove a key binding"
+examples = [
+  { info = "Unbind a key", cmd = "tmux unbind-key x" },
+  { info = "Unbind a root-table key", cmd = "tmux unbind-key -n M-Left" },
+]
+
+[[tmux]]
+name = "unlink-window"
+description = "Unlink a window from a session"
+examples = [{ info = "Unlink the current window", cmd = "tmux unlink-window" }]
+
+[[tmux]]
+name = "wait-for"
+description = "Synchronize commands on a channel"
+examples = [
+  { info = "Wait on a channel", cmd = "tmux wait-for mychannel" },
+  { info = "Signal a channel", cmd = "tmux wait-for -S mychannel" },
+]

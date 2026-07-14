@@ -2,10 +2,11 @@ use clap::{Parser, Subcommand, command};
 
 use crate::{
     cli::{
-        completions::CompletionsCommand, kill::KillCommand, last_session::LastSessionCommand,
-        last_window::LastWindowCommand, move_window::MoveWindowCommand, new::NewCommand,
-        record::RecordCommand, rename::RenameCommand, swap::SwapWindowCommand,
-        switch::SwitchCommand, switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
+        completions::CompletionsCommand, help::HelpCommand, kill::KillCommand,
+        last_session::LastSessionCommand, last_window::LastWindowCommand,
+        move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
+        rename::RenameCommand, swap::SwapWindowCommand, switch::SwitchCommand,
+        switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
     },
     error::Result,
     tmux::TmuxClient,
@@ -17,6 +18,7 @@ use crate::{
 #[command(about = "A CLI for managing tmux sessions", long_about = None)]
 #[command(version)]
 #[command(subcommand_required(true))]
+#[command(disable_help_subcommand = true)]
 pub struct Cli {
     /// The command to run
     #[clap(subcommand)]
@@ -71,6 +73,10 @@ pub enum Commands {
 
     /// Generate shell completions
     Completions(CompletionsCommand),
+
+    /// Browse all tsm and tmux commands
+    #[command(alias = "h")]
+    Help(HelpCommand),
 }
 
 impl Cli {
@@ -91,6 +97,7 @@ impl Cli {
                 cmd.run();
                 Ok(())
             }
+            Commands::Help(cmd) => cmd.run(),
         }
     }
 }

@@ -69,6 +69,9 @@ tsm kll -a                      # Kill all
 tsm rename -s mysession -n newname # Rename a session
 tsm rename -n newname              # Rename current session
 
+# Browse commands (fuzzy-find all tsm + tmux commands with help)
+tsm help                        # Helix-style command palette in fzf
+
 # Workspaces (session templates)
 tsm workspace                       # Pick and launch workspace
 tsm workspace myproject             # Launch specific workspace
@@ -95,6 +98,15 @@ Most commands have short aliases:
 - `tsm mv` → `tsm move-window`
 - `tsm sww` → `tsm swap-window`
 - `tsm ws` → `tsm workspace`
+- `tsm h` → `tsm help`
+
+## Command Palette (`tsm help`)
+
+It opens a fuzzy picker listing **every tsm subcommand** _and_ **every tmux command**, each with a short description. Type to filter; the live preview shows tldr-style usage examples plus the full syntax. Hit `Enter` to print the selected command's examples to the terminal.
+
+```bash
+tsm help        # or `tsm h`
+```
 
 ## Workspaces (For the Declarative Obsessed)
 
@@ -165,6 +177,7 @@ bind l run-shell "tsm last-window"
 bind M display-popup -E -w 80% -h 80% "tsm move-window"
 bind m command-prompt -p "Swap with window:" "run-shell 'tsm swap-window -t %%'"
 bind W display-popup -E -w 80% -h 80% "tsm workspace"
+bind ? display-popup -E -w 80% -h 80% "tsm help"
 
 # Track window switches (makes last-window/last-session actually useful)
 set-hook -g after-select-window 'run-shell "tsm record"'
@@ -181,6 +194,7 @@ set-hook -g after-select-window 'run-shell "tsm record"'
 - `prefix + M` - Move window to another session (for when you put things in the wrong place)
 - `prefix + m` - Swap current window with another (manual reordering for perfectionists)
 - `prefix + W` - Launch workspace (for your carefully crafted TOML files)
+- `prefix + ?` - Command palette: fuzzy-find every tsm + tmux command and read its help
 
 **The Hook:**
 

@@ -72,18 +72,6 @@ impl FzfPicker {
         self
     }
 
-    /// Sets the margin around the finder (fzf's `--margin`).
-    pub fn with_margin(mut self, margin: &str) -> Self {
-        self.margin = Some(margin.to_string());
-        self
-    }
-
-    /// Sets the padding inside the finder border (fzf's `--padding`).
-    pub fn with_padding(mut self, padding: &str) -> Self {
-        self.padding = Some(padding.to_string());
-        self
-    }
-
     /// Sets a sticky header line shown above the list (fzf's `--header`).
     pub fn with_header(mut self, header: &str) -> Self {
         self.header = Some(header.to_string());

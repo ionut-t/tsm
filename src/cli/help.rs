@@ -144,8 +144,6 @@ impl HelpCommand {
             .with_preview_label(" Help ")
             .with_border("rounded")
             .with_border_label(" Commands ")
-            .with_margin("5%")
-            .with_padding("1")
             .with_header(&header);
 
         let selection = match picker.pick(&items)? {

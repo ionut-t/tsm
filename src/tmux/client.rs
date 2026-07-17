@@ -352,12 +352,22 @@ impl TmuxClient {
         env: &HashMap<String, String>,
     ) -> Result<()> {
         let mut cmd = self.tmux_cmd();
+        // Detached sessions default to 80x24 until a client attaches. Size the
+        // session from the launching terminal (`-x -`/`-y -`, tmux >= 3.2) so
+        // splits, resizes, and commands run against the real geometry. tmux
+        // reads the client size from its tty, but `output()` nulls stdin, so
+        // pass ours through — without it `-x -` silently falls back to 80x24.
         cmd.arg("new-session")
             .arg("-d")
+            .arg("-x")
+            .arg("-")
+            .arg("-y")
+            .arg("-")
             .arg("-s")
             .arg(name)
             .arg("-c")
-            .arg(path);
+            .arg(path)
+            .stdin(std::process::Stdio::inherit());
 
         Self::add_env_args(&mut cmd, env);
 
@@ -408,10 +418,15 @@ impl TmuxClient {
             .tmux_cmd()
             .arg("new-session")
             .arg("-d")
+            .arg("-x")
+            .arg("-")
+            .arg("-y")
+            .arg("-")
             .arg("-s")
             .arg(&name)
             .arg("-c")
             .arg(path)
+            .stdin(std::process::Stdio::inherit())
             .output()?;
 
         if output.status.success() {

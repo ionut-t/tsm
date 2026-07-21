@@ -1,8 +1,7 @@
 use crate::error::Result;
 use crate::error::TsmError;
-use crate::history::WindowHistory;
-use crate::history::paths;
-use crate::tmux::TmuxClient;
+use crate::history::HistoryStore;
+use crate::tmux::Tmux;
 
 /// Swaps the positions of two windows within the current session.
 ///
@@ -27,7 +26,7 @@ impl SwapWindowCommand {
     /// Executes the swap window command.
     ///
     /// Swaps the source and target windows and switches to the new position of the current window.
-    pub fn run(&self, client: &TmuxClient) -> Result<()> {
+    pub fn run(&self, client: &dyn Tmux, history: &mut dyn HistoryStore) -> Result<()> {
         if !client.is_inside_tmux() {
             return Err(TsmError::NotInTmux);
         }
@@ -80,11 +79,7 @@ impl SwapWindowCommand {
 
         if source_index == current_window_index {
             client.switch_to_window(&session, self.target)?;
-
-            let mut history = WindowHistory::new(paths::history_file_path());
-            history.load()?;
-            history.record_access(&session, self.target)?;
-            history.save()?;
+            history.record(&session, self.target)?;
         }
 
         if !self.quiet {
@@ -95,5 +90,131 @@ impl SwapWindowCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{InMemoryHistory, MockTmux};
+    use crate::tmux::Window;
+
+    fn win(session: &str, index: u32) -> Window {
+        Window {
+            session_name: session.to_string(),
+            index,
+            name: format!("w{index}"),
+            pane_id: format!("%{index}"),
+        }
+    }
+
+    fn cmd(source: Option<u32>, target: u32, quiet: bool) -> SwapWindowCommand {
+        SwapWindowCommand {
+            source,
+            target,
+            quiet,
+        }
+    }
+
+    #[test]
+    fn errors_when_not_inside_tmux() {
+        let mut mock = MockTmux::default();
+        mock.inside_tmux = false;
+        let mut history = InMemoryHistory::new();
+        let err = cmd(Some(1), 2, false).run(&mock, &mut history).unwrap_err();
+        assert!(matches!(err, TsmError::NotInTmux));
+    }
+
+    #[test]
+    fn no_op_when_source_equals_target() {
+        let mock = MockTmux::default();
+        let mut history = InMemoryHistory::new();
+        cmd(Some(2), 2, false).run(&mock, &mut history).unwrap();
+        assert!(!mock.called("swap_windows"));
+        assert!(mock.called("display_message(Source and target"));
+    }
+
+    #[test]
+    fn swaps_and_follows_current_window() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 1);
+        mock.windows = vec![win("dev", 1), win("dev", 2)];
+
+        // Source 1 is the current window, so after swapping to 2 the command
+        // follows it there.
+        let mut history = InMemoryHistory::new();
+        cmd(Some(1), 2, false).run(&mock, &mut history).unwrap();
+
+        assert!(mock.called("swap_windows(1,2)"));
+        assert!(mock.called("switch_to_window(dev,2)"));
+        assert!(mock.called("display_message(Swapped windows 1 and 2)"));
+    }
+
+    #[test]
+    fn reports_missing_window() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 1);
+        mock.windows = vec![win("dev", 1), win("dev", 2)];
+
+        let mut history = InMemoryHistory::new();
+        cmd(Some(9), 2, false).run(&mock, &mut history).unwrap();
+        assert!(!mock.called("swap_windows"));
+        assert!(mock.called("display_message(Window 9 not found"));
+    }
+
+    #[test]
+    fn quiet_suppresses_success_message() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 3);
+        mock.windows = vec![win("dev", 1), win("dev", 2)];
+
+        // Current window (3) is neither source nor target, so no follow/switch.
+        let mut history = InMemoryHistory::new();
+        cmd(Some(1), 2, true).run(&mock, &mut history).unwrap();
+        assert!(mock.called("swap_windows(1,2)"));
+        assert!(!mock.called("display_message"));
+    }
+
+    #[test]
+    fn source_defaults_to_current_window_when_omitted() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 1);
+        mock.windows = vec![win("dev", 1), win("dev", 2)];
+
+        // No source given → the current window (1) is swapped with 2.
+        let mut history = InMemoryHistory::new();
+        cmd(None, 2, false).run(&mock, &mut history).unwrap();
+        assert!(mock.called("swap_windows(1,2)"));
+        assert!(mock.called("switch_to_window(dev,2)"));
+    }
+
+    #[test]
+    fn reports_when_session_has_fewer_than_two_windows() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 1);
+        mock.windows = vec![win("dev", 1)];
+
+        let mut history = InMemoryHistory::new();
+        cmd(Some(1), 2, false).run(&mock, &mut history).unwrap();
+        assert!(!mock.called("swap_windows"));
+        assert!(mock.called("display_message(Not enough windows"));
+    }
+
+    #[test]
+    fn reports_missing_target_window() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "dev".to_string();
+        mock.current_window = ("dev".to_string(), 1);
+        mock.windows = vec![win("dev", 1), win("dev", 2)];
+
+        let mut history = InMemoryHistory::new();
+        cmd(Some(1), 9, false).run(&mock, &mut history).unwrap();
+        assert!(!mock.called("swap_windows"));
+        assert!(mock.called("display_message(Window 9 not found"));
     }
 }

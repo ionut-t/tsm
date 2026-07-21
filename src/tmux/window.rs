@@ -1,3 +1,4 @@
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Window {
     pub session_name: String,
     pub index: u32,

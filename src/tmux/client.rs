@@ -5,6 +5,105 @@ use std::process::Command;
 
 pub struct TmuxClient;
 
+/// Abstraction over the tmux operations the CLI relies on.
+///
+/// Commands take `&dyn Tmux` rather than the concrete [`TmuxClient`], so their
+/// orchestration logic can be exercised in tests against an in-memory double
+/// without spawning a real tmux server.
+pub trait Tmux {
+    fn is_inside_tmux(&self) -> bool;
+
+    fn new_window(
+        &self,
+        session: &str,
+        name: Option<&str>,
+        path: Option<&std::path::Path>,
+        env: &HashMap<String, String>,
+    ) -> Result<usize>;
+
+    fn rename_window(&self, session: &str, new_name: &str) -> Result<()>;
+
+    fn split_horizontal(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+        env: &HashMap<String, String>,
+    ) -> Result<String>;
+
+    fn split_vertical(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+        env: &HashMap<String, String>,
+    ) -> Result<String>;
+
+    fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()>;
+
+    fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()>;
+
+    fn send_keys(&self, pane_id: &str, command: &str) -> Result<()>;
+
+    fn select_pane(&self, pane_id: &str) -> Result<()>;
+
+    fn list_panes(&self, session: &str, window_index: usize) -> Result<Vec<String>>;
+
+    fn get_current_window_index(&self, session: &str) -> Result<usize>;
+
+    fn current_session(&self) -> Result<String>;
+
+    fn list_sessions(&self) -> Vec<String>;
+
+    fn list_windows(&self) -> Result<Vec<Window>>;
+
+    fn create_session_detached(
+        &self,
+        name: &str,
+        path: &std::path::Path,
+        env: &HashMap<String, String>,
+    ) -> Result<()>;
+
+    fn respawn_pane(
+        &self,
+        pane_id: &str,
+        path: &std::path::Path,
+        env: &HashMap<String, String>,
+    ) -> Result<()>;
+
+    fn new_session(&self, name: String, path: String) -> Result<()>;
+
+    fn select_window(&self, session: &str, window_index: usize) -> Result<()>;
+
+    fn kill_session(&self, session: &str) -> Result<()>;
+
+    fn kill_all_sessions(&self) -> Result<()>;
+
+    fn rename_session(&self, current_name: Option<&str>, new_name: &str) -> Result<()>;
+
+    fn attach_session(&self, session: &str) -> Result<()>;
+
+    fn switch_session(&self, name: &str) -> Result<()>;
+
+    fn switch_to_window(&self, session: &str, window_index: u32) -> Result<()>;
+
+    fn attach_to_window(&self, session: &str, window_index: u32) -> Result<()>;
+
+    fn get_current_window(&self) -> Result<(String, u32)>;
+
+    fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()>;
+
+    fn get_pane_id(&self, session: &str, window_index: u32) -> Result<String>;
+
+    fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)>;
+
+    fn swap_windows(&self, source_index: u32, target_index: u32) -> Result<()>;
+
+    fn is_last_window_in_session(&self, session: &str) -> Result<bool>;
+
+    fn display_message(&self, message: &str) -> Result<()>;
+}
+
 impl TmuxClient {
     pub fn new() -> Self {
         TmuxClient
@@ -23,93 +122,6 @@ impl TmuxClient {
         for (key, value) in vars {
             cmd.arg("-e").arg(format!("{}={}", key, value));
         }
-    }
-
-    pub fn is_inside_tmux(&self) -> bool {
-        std::env::var("TMUX").is_ok()
-    }
-
-    pub fn new_window(
-        &self,
-        session: &str,
-        name: Option<&str>,
-        path: Option<&std::path::Path>,
-        env: &HashMap<String, String>,
-    ) -> Result<usize> {
-        let mut cmd = self.tmux_cmd();
-        cmd.arg("new-window")
-            .arg("-t")
-            .arg(session)
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{window_index}");
-
-        if let Some(window_name) = name {
-            cmd.arg("-n").arg(window_name);
-        }
-
-        if let Some(p) = path {
-            cmd.arg("-c").arg(p);
-        }
-
-        Self::add_env_args(&mut cmd, env);
-
-        let output = cmd.output()?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.trim().parse::<usize>().map_err(|_| {
-                TsmError::TmuxCommand(format!(
-                    "Failed to parse window index from: '{}'",
-                    stdout.trim()
-                ))
-            })
-        } else {
-            Err(TsmError::TmuxCommand(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ))
-        }
-    }
-
-    pub fn rename_window(&self, session: &str, new_name: &str) -> Result<()> {
-        let output = self
-            .tmux_cmd()
-            .arg("rename-window")
-            .arg("-t")
-            .arg(session)
-            .arg(new_name)
-            .output()?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(TsmError::TmuxCommand(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ))
-        }
-    }
-
-    /// Split a pane horizontally (creates panes side by side)
-    pub fn split_horizontal(
-        &self,
-        target_pane: &str,
-        path: Option<&std::path::Path>,
-        percentage: Option<u32>,
-        env: &HashMap<String, String>,
-    ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-h", path, percentage, env)
-    }
-
-    /// Split a pane vertically (creates panes stacked top/bottom)
-    pub fn split_vertical(
-        &self,
-        target_pane: &str,
-        path: Option<&std::path::Path>,
-        percentage: Option<u32>,
-        env: &HashMap<String, String>,
-    ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-v", path, percentage, env)
     }
 
     fn split_pane_internal(
@@ -157,8 +169,132 @@ impl TmuxClient {
         }
     }
 
+    fn list_sorted_sessions(&self) -> Vec<(String, u64)> {
+        let mut sessions = self
+            .tmux_cmd()
+            .arg("list-sessions")
+            .arg("-F")
+            .arg("#{session_name}:#{session_last_attached}")
+            .output()
+            .map(|output| {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    stdout
+                        .lines()
+                        .filter_map(|line| {
+                            let mut parts = line.splitn(2, ':');
+                            if let (Some(name), Some(timestamp)) = (parts.next(), parts.next()) {
+                                if let Ok(time) = timestamp.trim().parse::<u64>() {
+                                    Some((name.to_string(), time))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                }
+            })
+            .unwrap_or_else(|_| vec![]);
+
+        sessions.sort_by_key(|s| std::cmp::Reverse(s.1));
+        sessions
+    }
+}
+
+impl Tmux for TmuxClient {
+    fn is_inside_tmux(&self) -> bool {
+        std::env::var("TMUX").is_ok()
+    }
+
+    fn new_window(
+        &self,
+        session: &str,
+        name: Option<&str>,
+        path: Option<&std::path::Path>,
+        env: &HashMap<String, String>,
+    ) -> Result<usize> {
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("new-window")
+            .arg("-t")
+            .arg(session)
+            .arg("-d")
+            .arg("-P")
+            .arg("-F")
+            .arg("#{window_index}");
+
+        if let Some(window_name) = name {
+            cmd.arg("-n").arg(window_name);
+        }
+
+        if let Some(p) = path {
+            cmd.arg("-c").arg(p);
+        }
+
+        Self::add_env_args(&mut cmd, env);
+
+        let output = cmd.output()?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.trim().parse::<usize>().map_err(|_| {
+                TsmError::TmuxCommand(format!(
+                    "Failed to parse window index from: '{}'",
+                    stdout.trim()
+                ))
+            })
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn rename_window(&self, session: &str, new_name: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .arg("rename-window")
+            .arg("-t")
+            .arg(session)
+            .arg(new_name)
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    /// Split a pane horizontally (creates panes side by side)
+    fn split_horizontal(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+        env: &HashMap<String, String>,
+    ) -> Result<String> {
+        self.split_pane_internal(target_pane, "-h", path, percentage, env)
+    }
+
+    /// Split a pane vertically (creates panes stacked top/bottom)
+    fn split_vertical(
+        &self,
+        target_pane: &str,
+        path: Option<&std::path::Path>,
+        percentage: Option<u32>,
+        env: &HashMap<String, String>,
+    ) -> Result<String> {
+        self.split_pane_internal(target_pane, "-v", path, percentage, env)
+    }
+
     /// Resize a pane to a percentage of the window height
-    pub fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()> {
+    fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("resize-pane")
@@ -178,7 +314,7 @@ impl TmuxClient {
     }
 
     /// Resize a pane to a percentage of the window width
-    pub fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()> {
+    fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("resize-pane")
@@ -197,7 +333,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn send_keys(&self, pane_id: &str, command: &str) -> Result<()> {
+    fn send_keys(&self, pane_id: &str, command: &str) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("send-keys")
@@ -216,7 +352,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn select_pane(&self, pane_id: &str) -> Result<()> {
+    fn select_pane(&self, pane_id: &str) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("select-pane")
@@ -233,7 +369,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn list_panes(&self, session: &str, window_index: usize) -> Result<Vec<String>> {
+    fn list_panes(&self, session: &str, window_index: usize) -> Result<Vec<String>> {
         let output = self
             .tmux_cmd()
             .arg("list-panes")
@@ -254,7 +390,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn get_current_window_index(&self, session: &str) -> Result<usize> {
+    fn get_current_window_index(&self, session: &str) -> Result<usize> {
         let output = self
             .tmux_cmd()
             .arg("display-message")
@@ -278,7 +414,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn current_session(&self) -> Result<String> {
+    fn current_session(&self) -> Result<String> {
         let output = self
             .tmux_cmd()
             .arg("display-message")
@@ -295,14 +431,14 @@ impl TmuxClient {
         }
     }
 
-    pub fn list_sessions(&self) -> Vec<String> {
+    fn list_sessions(&self) -> Vec<String> {
         self.list_sorted_sessions()
             .into_iter()
             .map(|(name, _)| name)
             .collect()
     }
 
-    pub fn list_windows(&self) -> Result<Vec<Window>> {
+    fn list_windows(&self) -> Result<Vec<Window>> {
         let output = self
             .tmux_cmd()
             .arg("list-windows")
@@ -345,7 +481,7 @@ impl TmuxClient {
         windows
     }
 
-    pub fn create_session_detached(
+    fn create_session_detached(
         &self,
         name: &str,
         path: &std::path::Path,
@@ -386,7 +522,7 @@ impl TmuxClient {
     /// initial pane its window/pane-level env without leaking those overrides
     /// into the session environment (as `new-session -e` would). `-k` kills the
     /// existing idle shell; `-e` is process-scoped, like `new-window`.
-    pub fn respawn_pane(
+    fn respawn_pane(
         &self,
         pane_id: &str,
         path: &std::path::Path,
@@ -413,7 +549,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn new_session(&self, name: String, path: String) -> Result<()> {
+    fn new_session(&self, name: String, path: String) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("new-session")
@@ -442,7 +578,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn select_window(&self, session: &str, window_index: usize) -> Result<()> {
+    fn select_window(&self, session: &str, window_index: usize) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("select-window")
@@ -459,7 +595,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn kill_session(&self, session: &str) -> Result<()> {
+    fn kill_session(&self, session: &str) -> Result<()> {
         if self.is_inside_tmux() {
             let current = self.current_session().ok();
 
@@ -488,12 +624,12 @@ impl TmuxClient {
         }
     }
 
-    pub fn kill_all_sessions(&self) -> Result<()> {
+    fn kill_all_sessions(&self) -> Result<()> {
         self.tmux_cmd().arg("kill-server").output()?;
         Ok(())
     }
 
-    pub fn rename_session(&self, current_name: Option<&str>, new_name: &str) -> Result<()> {
+    fn rename_session(&self, current_name: Option<&str>, new_name: &str) -> Result<()> {
         let current_name = if let Some(name) = current_name {
             name.to_string()
         } else {
@@ -521,7 +657,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn attach_session(&self, session: &str) -> Result<()> {
+    fn attach_session(&self, session: &str) -> Result<()> {
         let status = self
             .tmux_cmd()
             .arg("attach-session")
@@ -538,7 +674,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn switch_session(&self, name: &str) -> Result<()> {
+    fn switch_session(&self, name: &str) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("switch-client")
@@ -555,7 +691,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn switch_to_window(&self, session: &str, window_index: u32) -> Result<()> {
+    fn switch_to_window(&self, session: &str, window_index: u32) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("switch-client")
@@ -572,7 +708,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn attach_to_window(&self, session: &str, window_index: u32) -> Result<()> {
+    fn attach_to_window(&self, session: &str, window_index: u32) -> Result<()> {
         let status = self
             .tmux_cmd()
             .arg("attach-session")
@@ -589,7 +725,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn get_current_window(&self) -> Result<(String, u32)> {
+    fn get_current_window(&self) -> Result<(String, u32)> {
         let output = self
             .tmux_cmd()
             .arg("display-message")
@@ -619,7 +755,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
+    fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("move-window")
@@ -638,7 +774,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn get_pane_id(&self, session: &str, window_index: u32) -> Result<String> {
+    fn get_pane_id(&self, session: &str, window_index: u32) -> Result<String> {
         let output = self
             .tmux_cmd()
             .arg("display-message")
@@ -664,7 +800,7 @@ impl TmuxClient {
         }
     }
 
-    pub fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)> {
+    fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)> {
         let windows = self.list_windows()?;
 
         for window in windows {
@@ -678,7 +814,7 @@ impl TmuxClient {
         ))
     }
 
-    pub fn swap_windows(&self, source_index: u32, target_index: u32) -> Result<()> {
+    fn swap_windows(&self, source_index: u32, target_index: u32) -> Result<()> {
         let (session_name, _) = self.get_current_window()?;
 
         let output = self
@@ -699,13 +835,13 @@ impl TmuxClient {
         }
     }
 
-    pub fn is_last_window_in_session(&self, session: &str) -> Result<bool> {
+    fn is_last_window_in_session(&self, session: &str) -> Result<bool> {
         let windows = self.list_windows()?;
         let count = windows.iter().filter(|w| w.session_name == session).count();
         Ok(count == 1)
     }
 
-    pub fn display_message(&self, message: &str) -> Result<()> {
+    fn display_message(&self, message: &str) -> Result<()> {
         if !self.is_inside_tmux() {
             println!("{}", message);
             return Ok(());
@@ -725,39 +861,59 @@ impl TmuxClient {
             ))
         }
     }
+}
 
-    fn list_sorted_sessions(&self) -> Vec<(String, u64)> {
-        let mut sessions = self
-            .tmux_cmd()
-            .arg("list-sessions")
-            .arg("-F")
-            .arg("#{session_name}:#{session_last_attached}")
-            .output()
-            .map(|output| {
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    stdout
-                        .lines()
-                        .filter_map(|line| {
-                            let mut parts = line.splitn(2, ':');
-                            if let (Some(name), Some(timestamp)) = (parts.next(), parts.next()) {
-                                if let Ok(time) = timestamp.trim().parse::<u64>() {
-                                    Some((name.to_string(), time))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                } else {
-                    vec![]
-                }
-            })
-            .unwrap_or_else(|_| vec![]);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::with_env;
 
-        sessions.sort_by(|a, b| b.1.cmp(&a.1));
-        sessions
+    fn args_of(cmd: &Command) -> Vec<String> {
+        cmd.get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn add_env_args_emits_sorted_dash_e_pairs() {
+        let mut cmd = Command::new("tmux");
+        let env = HashMap::from([
+            ("ZED".to_string(), "1".to_string()),
+            ("ALPHA".to_string(), "2".to_string()),
+            ("MID".to_string(), "3".to_string()),
+        ]);
+        TmuxClient::add_env_args(&mut cmd, &env);
+
+        // Sorted by key for deterministic command construction.
+        assert_eq!(
+            args_of(&cmd),
+            vec!["-e", "ALPHA=2", "-e", "MID=3", "-e", "ZED=1"]
+        );
+    }
+
+    #[test]
+    fn add_env_args_with_empty_map_adds_nothing() {
+        let mut cmd = Command::new("tmux");
+        TmuxClient::add_env_args(&mut cmd, &HashMap::new());
+        assert!(args_of(&cmd).is_empty());
+    }
+
+    #[test]
+    fn add_env_args_preserves_values_with_equals_and_spaces() {
+        let mut cmd = Command::new("tmux");
+        let env = HashMap::from([("K".to_string(), "a=b c".to_string())]);
+        TmuxClient::add_env_args(&mut cmd, &env);
+        assert_eq!(args_of(&cmd), vec!["-e", "K=a=b c"]);
+    }
+
+    #[test]
+    fn is_inside_tmux_reflects_tmux_env_var() {
+        let client = TmuxClient::new();
+        with_env(&[("TMUX", Some("/tmp/tmux-1000/default,1234,0"))], || {
+            assert!(client.is_inside_tmux());
+        });
+        with_env(&[("TMUX", None)], || {
+            assert!(!client.is_inside_tmux());
+        });
     }
 }

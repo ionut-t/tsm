@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, command};
+use clap::{Parser, Subcommand};
 
 use crate::{
     cli::{
@@ -9,7 +9,10 @@ use crate::{
         switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
     },
     error::Result,
+    fzf::FzfPicker,
+    history::{WindowHistory, paths},
     tmux::TmuxClient,
+    zoxide::Zoxide,
 };
 
 /// A CLI for managing tmux sessions and windows
@@ -81,23 +84,85 @@ pub enum Commands {
 
 impl Cli {
     pub fn run(&self, client: TmuxClient) -> Result<()> {
+        let picker = FzfPicker::new();
         match &self.command {
-            Commands::New(cmd) => cmd.run(&client),
-            Commands::Kill(cmd) => cmd.run(&client),
+            Commands::New(cmd) => cmd.run(&client, &picker, &Zoxide::new()),
+            Commands::Kill(cmd) => cmd.run(&client, &picker),
             Commands::Rename(cmd) => cmd.run(&client),
-            Commands::Switch(cmd) => cmd.run(&client),
-            Commands::SwitchWindow(cmd) => cmd.run(&client),
-            Commands::LastSession(cmd) => cmd.run(&client),
-            Commands::LastWindow(cmd) => cmd.run(&client),
-            Commands::Record(cmd) => cmd.run(&client),
-            Commands::MoveWindow(cmd) => cmd.run(&client),
-            Commands::SwapWindow(cmd) => cmd.run(&client),
-            Commands::Workspace(cmd) => cmd.run(&client),
+            Commands::Switch(cmd) => cmd.run(&client, &picker),
+            Commands::SwitchWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
+            Commands::LastSession(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::LastWindow(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::Record(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::MoveWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
+            Commands::SwapWindow(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::Workspace(cmd) => cmd.run(&client, &picker),
             Commands::Completions(cmd) => {
                 cmd.run();
                 Ok(())
             }
-            Commands::Help(cmd) => cmd.run(),
+            Commands::Help(cmd) => cmd.run(&picker),
         }
+    }
+}
+
+/// Open the on-disk window history. Constructed per-command so commands that
+/// don't use history never touch the history file.
+fn open_history() -> Result<WindowHistory> {
+    WindowHistory::open(paths::history_file_path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn cli_definition_is_valid() {
+        // clap's own consistency check: duplicate flags, bad arg config, etc.
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn requires_a_subcommand() {
+        assert!(Cli::try_parse_from(["tsm"]).is_err());
+    }
+
+    #[test]
+    fn parses_new_command_with_flags() {
+        let cli = Cli::try_parse_from(["tsm", "new", "--name", "dev", "--quiet"]).unwrap();
+        assert!(matches!(cli.command, Commands::New(_)));
+    }
+
+    #[test]
+    fn short_aliases_resolve_to_expected_subcommands() {
+        assert!(matches!(
+            Cli::try_parse_from(["tsm", "n"]).unwrap().command,
+            Commands::New(_)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["tsm", "sw"]).unwrap().command,
+            Commands::SwitchWindow(_)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["tsm", "mv"]).unwrap().command,
+            Commands::MoveWindow(_)
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["tsm", "ws"]).unwrap().command,
+            Commands::Workspace(_)
+        ));
+    }
+
+    #[test]
+    fn swap_window_requires_target() {
+        // `--target` has no default and is mandatory.
+        assert!(Cli::try_parse_from(["tsm", "swap-window"]).is_err());
+        assert!(Cli::try_parse_from(["tsm", "swap-window", "--target", "2"]).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_subcommand() {
+        assert!(Cli::try_parse_from(["tsm", "bogus"]).is_err());
     }
 }

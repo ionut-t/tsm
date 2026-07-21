@@ -6,7 +6,7 @@ use clap::CommandFactory;
 
 use crate::cli::help_docs::{Docs, Example};
 use crate::error::Result;
-use crate::fzf::FzfPicker;
+use crate::fzf::{Picker, PickerOptions};
 
 use super::commands::Cli;
 
@@ -56,7 +56,7 @@ pub struct HelpCommand {
 }
 
 impl HelpCommand {
-    pub fn run(&self) -> Result<()> {
+    pub fn run(&self, picker: &dyn Picker) -> Result<()> {
         // Preview / doc-render mode: print one command's doc and exit.
         if let Some(name) = &self.render {
             render_doc(&self.source, name);
@@ -129,7 +129,7 @@ impl HelpCommand {
             .unwrap_or_else(|| "tsm".to_string());
         let preview_cmd = format!("'{}' help --source {{1}} --render {{2}}", exe);
 
-        let picker = FzfPicker::new()
+        let options = PickerOptions::new()
             .with_prompt(&self.prompt)
             .with_delimiter("\t")
             // Show the keys column (3) and the description (4)...
@@ -146,7 +146,7 @@ impl HelpCommand {
             .with_border_label(" Commands ")
             .with_header(&header);
 
-        let selection = match picker.pick(&items)? {
+        let selection = match picker.pick(&options, &items)? {
             Some(sel) => sel,
             None => return Ok(()), // User canceled
         };

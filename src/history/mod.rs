@@ -1,4 +1,4 @@
 pub mod paths;
 pub mod tracker;
 
-pub use tracker::WindowHistory;
+pub use tracker::{HistoryStore, WindowHistory};

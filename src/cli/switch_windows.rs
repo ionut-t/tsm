@@ -1,8 +1,10 @@
-use crate::cli::utils::PREVIEW_CMD;
+use crate::cli::utils::{PREVIEW_CMD, record_current_window};
 use crate::error::Result;
-use crate::history::WindowHistory;
-use crate::history::paths;
-use crate::{fzf::FzfPicker, tmux::TmuxClient};
+use crate::history::HistoryStore;
+use crate::{
+    fzf::{Picker, PickerOptions},
+    tmux::Tmux,
+};
 
 // ANSI styling for the picker rows (fzf is launched with `--ansi`).
 const POSITION_COLOR: &str = "\x1b[35m"; // magenta
@@ -30,23 +32,24 @@ impl SwitchWindowCommand {
     /// Executes the switch window command.
     ///
     /// Displays an fzf picker with all windows sorted by access history and switches to the selected window.
-    pub fn run(&self, client: &TmuxClient) -> Result<()> {
+    pub fn run(
+        &self,
+        client: &dyn Tmux,
+        picker: &dyn Picker,
+        history: &mut dyn HistoryStore,
+    ) -> Result<()> {
         let windows = client.list_windows()?;
 
-        let mut history = WindowHistory::new(paths::history_file_path());
-        history.load()?;
-        history.record_current_window(client)?;
+        record_current_window(client, history)?;
 
         let mut indexed_windows: Vec<_> = windows
             .into_iter()
             .map(|w| {
-                let last_access = history
-                    .get_last_access(&w.session_name, w.index)
-                    .unwrap_or(0);
+                let last_access = history.last_access(&w.session_name, w.index).unwrap_or(0);
                 (w, last_access)
             })
             .collect();
-        indexed_windows.sort_by(|a, b| b.1.cmp(&a.1));
+        indexed_windows.sort_by_key(|w| std::cmp::Reverse(w.1));
         let windows: Vec<_> = indexed_windows.into_iter().map(|(w, _)| w).collect();
 
         // Align the session and window-name columns so rows can be scanned vertically.
@@ -100,14 +103,14 @@ impl SwitchWindowCommand {
 
         let preview_cmd = if self.preview { PREVIEW_CMD } else { "" };
 
-        let picker = FzfPicker::new()
+        let options = PickerOptions::new()
             .with_prompt(&self.prompt)
             .with_preview_command(preview_cmd)
             .with_delimiter("\t")
             .with_nth("2..")
             .with_search_nth("1");
 
-        let selection = match picker.pick(&items)? {
+        let selection = match picker.pick(&options, &items)? {
             Some(sel) => sel,
             None => return Ok(()), // User canceled
         };
@@ -118,15 +121,17 @@ impl SwitchWindowCommand {
             )
         })?;
 
-        let window = windows.iter().find(|w| w.pane_id == pane_id).ok_or_else(|| {
-            crate::error::TsmError::InvalidArgument(format!(
-                "Selected window with pane id {} not found",
-                pane_id
-            ))
-        })?;
+        let window = windows
+            .iter()
+            .find(|w| w.pane_id == pane_id)
+            .ok_or_else(|| {
+                crate::error::TsmError::InvalidArgument(format!(
+                    "Selected window with pane id {} not found",
+                    pane_id
+                ))
+            })?;
 
-        history.record_access(&window.session_name, window.index)?;
-        history.save()?;
+        history.record(&window.session_name, window.index)?;
 
         if client.is_inside_tmux() {
             client.switch_to_window(&window.session_name, window.index)?;
@@ -135,5 +140,74 @@ impl SwitchWindowCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{InMemoryHistory, MockPicker, MockTmux};
+    use crate::tmux::Window;
+
+    fn win(session: &str, index: u32, pane: &str) -> Window {
+        Window {
+            session_name: session.to_string(),
+            index,
+            name: format!("w{index}"),
+            pane_id: pane.to_string(),
+        }
+    }
+
+    fn cmd() -> SwitchWindowCommand {
+        SwitchWindowCommand {
+            prompt: "Select: ".to_string(),
+            preview: false,
+        }
+    }
+
+    #[test]
+    fn switches_to_the_picked_window() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "s".to_string();
+        mock.current_window = ("s".to_string(), 1);
+        mock.windows = vec![win("s", 1, "%w1"), win("s", 2, "%w2")];
+
+        // fzf returns the whole row; the command routes on its first tab field
+        // (the hidden pane id). Only that field needs to be realistic.
+        let picker = MockPicker::returning("%w2\tdisplayed columns");
+        let mut history = InMemoryHistory::new();
+        cmd().run(&mock, &picker, &mut history).unwrap();
+
+        assert!(mock.called("switch_to_window(s,2)"));
+    }
+
+    #[test]
+    fn attaches_to_the_picked_window_when_outside_tmux() {
+        let mut mock = MockTmux::default();
+        mock.inside_tmux = false;
+        mock.windows = vec![win("s", 1, "%w1"), win("s", 2, "%w2")];
+
+        let picker = MockPicker::returning("%w1\tdisplayed columns");
+        let mut history = InMemoryHistory::new();
+        cmd().run(&mock, &picker, &mut history).unwrap();
+
+        assert!(mock.called("attach_to_window(s,1)"));
+        assert!(!mock.called("switch_to_window"));
+    }
+
+    #[test]
+    fn cancelling_the_picker_switches_nothing() {
+        let mut mock = MockTmux::default();
+        mock.current_session = "s".to_string();
+        mock.current_window = ("s".to_string(), 1);
+        mock.windows = vec![win("s", 1, "%w1")];
+
+        let mut history = InMemoryHistory::new();
+        cmd()
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
+
+        assert!(!mock.called("switch_to_window"));
+        assert!(!mock.called("attach_to_window"));
     }
 }

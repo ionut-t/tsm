@@ -38,3 +38,63 @@ pub enum TsmError {
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_messages_render_arguments() {
+        assert_eq!(TsmError::NotInTmux.to_string(), "Not inside a tmux session");
+        assert_eq!(
+            TsmError::TmuxCommand("boom".into()).to_string(),
+            "failed to execute tmux command: boom"
+        );
+        assert_eq!(
+            TsmError::Fzf("nope".into()).to_string(),
+            "failed to execute fzf command: nope"
+        );
+        assert_eq!(
+            TsmError::ZoxideQueryFailed.to_string(),
+            "zoxide is not installed or failed to execute"
+        );
+        assert_eq!(
+            TsmError::HomeDirectoryNotFound.to_string(),
+            "Home directory not found"
+        );
+        // InvalidArgument is transparent — it renders only the inner message.
+        assert_eq!(
+            TsmError::InvalidArgument("bad flag".into()).to_string(),
+            "bad flag"
+        );
+        assert_eq!(
+            TsmError::WorkspaceNotFound("dev".into()).to_string(),
+            "Workspace 'dev' not found"
+        );
+        assert_eq!(
+            TsmError::NoWorkspacesFound.to_string(),
+            "No workspaces found"
+        );
+        assert_eq!(
+            TsmError::WorkspaceAlreadyExists("dev".into()).to_string(),
+            "Workspace 'dev' already exists"
+        );
+    }
+
+    #[test]
+    fn converts_from_io_error() {
+        let io = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let err: TsmError = io.into();
+        assert!(matches!(err, TsmError::Io(_)));
+        assert_eq!(err.to_string(), "IO error: missing");
+    }
+
+    #[test]
+    fn converts_from_toml_error() {
+        let toml_err =
+            toml::from_str::<crate::workspace::config::Workspace>("name = ").unwrap_err();
+        let err: TsmError = toml_err.into();
+        assert!(matches!(err, TsmError::TomlDeserialization(_)));
+        assert!(err.to_string().starts_with("TOML deserialization error:"));
+    }
+}

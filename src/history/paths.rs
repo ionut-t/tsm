@@ -35,3 +35,60 @@ pub fn history_file_path() -> PathBuf {
 
     xdg_path
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::with_env;
+    use tempfile::TempDir;
+
+    #[test]
+    fn tsm_history_file_takes_precedence_and_creates_parent() {
+        let tmp = TempDir::new().unwrap();
+        let target = tmp.path().join("nested/dir/history");
+        with_env(&[("TSM_HISTORY_FILE", target.to_str())], || {
+            assert_eq!(history_file_path(), target);
+        });
+        assert!(
+            target.parent().unwrap().exists(),
+            "parent directory should be created"
+        );
+    }
+
+    #[test]
+    fn xdg_state_home_used_when_override_absent() {
+        let tmp = TempDir::new().unwrap();
+        with_env(
+            &[
+                ("TSM_HISTORY_FILE", None),
+                ("XDG_STATE_HOME", tmp.path().to_str()),
+            ],
+            || {
+                assert_eq!(history_file_path(), tmp.path().join("tsm").join("history"));
+            },
+        );
+        assert!(tmp.path().join("tsm").exists());
+    }
+
+    #[test]
+    fn falls_back_to_home_local_state() {
+        let tmp = TempDir::new().unwrap();
+        with_env(
+            &[
+                ("TSM_HISTORY_FILE", None),
+                ("XDG_STATE_HOME", None),
+                ("HOME", tmp.path().to_str()),
+            ],
+            || {
+                assert_eq!(
+                    history_file_path(),
+                    tmp.path()
+                        .join(".local")
+                        .join("state")
+                        .join("tsm")
+                        .join("history")
+                );
+            },
+        );
+    }
+}

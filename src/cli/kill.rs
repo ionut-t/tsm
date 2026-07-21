@@ -39,7 +39,7 @@ impl KillCommand {
             Some(n) => n,
             None => {
                 let options = PickerOptions::new().with_prompt(&self.prompt);
-                let sessions = client.list_sessions();
+                let sessions = client.list_sessions()?;
                 match picker.pick(&options, &sessions)? {
                     Some(selection) => selection,
                     None => return Ok(()),
@@ -60,6 +60,7 @@ impl KillCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::TsmError;
     use crate::test_support::{MockPicker, MockTmux};
 
     fn cmd(session: Option<&str>, all: bool, quiet: bool) -> KillCommand {
@@ -116,6 +117,19 @@ mod tests {
         );
         assert!(mock.called("kill_session(prod)"));
         assert!(mock.called("display_message(Killed session: prod)"));
+    }
+
+    #[test]
+    fn propagates_a_session_listing_failure() {
+        // When tmux can't be reached, the picker path surfaces the error rather
+        // than showing an empty list and silently killing nothing.
+        let mut mock = MockTmux::default();
+        mock.fail_list_sessions = true;
+        let err = cmd(None, false, false)
+            .run(&mock, &MockPicker::cancelling())
+            .unwrap_err();
+        assert!(matches!(err, TsmError::TmuxCommand(_)));
+        assert!(!mock.called("kill_session"));
     }
 
     #[test]

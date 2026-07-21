@@ -82,7 +82,7 @@ impl NewCommand {
             }
         };
 
-        let sessions = client.list_sessions();
+        let sessions = client.list_sessions()?;
         if sessions.contains(&name) {
             if client.is_inside_tmux() {
                 client.switch_session(&name)?;

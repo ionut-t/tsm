@@ -23,7 +23,7 @@ impl SwitchCommand {
             Some(n) => n,
             None => {
                 let options = PickerOptions::new().with_prompt(&self.prompt);
-                let sessions = client.list_sessions();
+                let sessions = client.list_sessions()?;
                 match picker.pick(&options, &sessions)? {
                     Some(selection) => selection,
                     None => return Ok(()),

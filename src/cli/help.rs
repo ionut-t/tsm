@@ -5,6 +5,7 @@ use std::process::Command;
 use clap::CommandFactory;
 
 use crate::cli::help_docs::{Docs, Example};
+use crate::cli::utils::shell_quote;
 use crate::error::Result;
 use crate::fzf::{Picker, PickerOptions};
 
@@ -123,11 +124,13 @@ impl HelpCommand {
         // The preview re-invokes this binary to render the highlighted command's
         // doc. Using the current exe path keeps it working off `PATH`; fzf shell-
         // quotes {1}/{2} (the hidden kind/name fields), so they are injection-safe.
+        // The exe path is ours to quote — `shell_quote` handles spaces and any
+        // embedded quote (which naive `'{}'` wrapping would break on).
         let exe = env::current_exe()
             .ok()
             .and_then(|p| p.to_str().map(String::from))
             .unwrap_or_else(|| "tsm".to_string());
-        let preview_cmd = format!("'{}' help --source {{1}} --render {{2}}", exe);
+        let preview_cmd = format!("{} help --source {{1}} --render {{2}}", shell_quote(&exe));
 
         let options = PickerOptions::new()
             .with_prompt(&self.prompt)

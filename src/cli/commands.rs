@@ -10,6 +10,7 @@ use crate::{
     },
     error::Result,
     fzf::FzfPicker,
+    history::{WindowHistory, paths},
     tmux::TmuxClient,
     zoxide::Zoxide,
 };
@@ -89,12 +90,12 @@ impl Cli {
             Commands::Kill(cmd) => cmd.run(&client, &picker),
             Commands::Rename(cmd) => cmd.run(&client),
             Commands::Switch(cmd) => cmd.run(&client, &picker),
-            Commands::SwitchWindow(cmd) => cmd.run(&client, &picker),
-            Commands::LastSession(cmd) => cmd.run(&client),
-            Commands::LastWindow(cmd) => cmd.run(&client),
-            Commands::Record(cmd) => cmd.run(&client),
-            Commands::MoveWindow(cmd) => cmd.run(&client, &picker),
-            Commands::SwapWindow(cmd) => cmd.run(&client),
+            Commands::SwitchWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
+            Commands::LastSession(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::LastWindow(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::Record(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::MoveWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
+            Commands::SwapWindow(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::Workspace(cmd) => cmd.run(&client, &picker),
             Commands::Completions(cmd) => {
                 cmd.run();
@@ -103,6 +104,12 @@ impl Cli {
             Commands::Help(cmd) => cmd.run(&picker),
         }
     }
+}
+
+/// Open the on-disk window history. Constructed per-command so commands that
+/// don't use history never touch the history file.
+fn open_history() -> Result<WindowHistory> {
+    WindowHistory::open(paths::history_file_path())
 }
 
 #[cfg(test)]

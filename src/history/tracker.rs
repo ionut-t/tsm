@@ -7,7 +7,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::error::TsmError;
 
 use crate::error::Result;
-use crate::tmux::Tmux;
+
+/// Read/write access to window access-history.
+///
+/// Commands depend on this trait rather than the concrete [`WindowHistory`], so
+/// their history logic can be tested against an in-memory store with
+/// deterministic timestamps — no filesystem, no wall-clock.
+pub trait HistoryStore {
+    /// Most-recent access timestamp for a window, if it has one.
+    fn last_access(&self, session: &str, window_index: u32) -> Option<u128>;
+
+    /// Record that a window was just accessed, persisting the change.
+    fn record(&mut self, session: &str, window_index: u32) -> Result<()>;
+}
 
 pub struct WindowHistory {
     file_path: PathBuf,
@@ -20,6 +32,13 @@ impl WindowHistory {
             file_path,
             entries: HashMap::new(),
         }
+    }
+
+    /// Construct and load history from `file_path` in one step.
+    pub fn open(file_path: PathBuf) -> Result<Self> {
+        let mut history = Self::new(file_path);
+        history.load()?;
+        Ok(history)
     }
 
     pub fn load(&mut self) -> Result<()> {
@@ -89,19 +108,22 @@ impl WindowHistory {
         Ok(())
     }
 
-    pub fn record_current_window(&mut self, tmux: &dyn Tmux) -> Result<()> {
-        if !tmux.is_inside_tmux() {
-            return Ok(());
-        }
-
-        let (session, index) = tmux.get_current_window()?;
-        self.record_access(&session, index)?;
-        Ok(())
-    }
-
     pub fn get_last_access(&self, session: &str, window_index: u32) -> Option<u128> {
         let window_id = format!("{}:{}", session, window_index);
         self.entries.get(&window_id).cloned()
+    }
+}
+
+impl HistoryStore for WindowHistory {
+    fn last_access(&self, session: &str, window_index: u32) -> Option<u128> {
+        self.get_last_access(session, window_index)
+    }
+
+    /// Records the access in memory (stamping the current time) and flushes the
+    /// whole history to disk.
+    fn record(&mut self, session: &str, window_index: u32) -> Result<()> {
+        self.record_access(session, window_index)?;
+        self.save()
     }
 }
 

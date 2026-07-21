@@ -2,7 +2,7 @@ use crate::{
     cli::utils::{PREVIEW_CMD, sort_windows_by_history},
     error::{Result, TsmError},
     fzf::{Picker, PickerOptions},
-    history::{WindowHistory, paths},
+    history::HistoryStore,
     tmux::Tmux,
 };
 
@@ -29,7 +29,12 @@ impl MoveWindowCommand {
     /// Executes the move window command.
     ///
     /// Moves the specified or selected window to the target session and switches to it.
-    pub fn run(&self, client: &dyn Tmux, picker: &dyn Picker) -> Result<()> {
+    pub fn run(
+        &self,
+        client: &dyn Tmux,
+        picker: &dyn Picker,
+        history: &mut dyn HistoryStore,
+    ) -> Result<()> {
         if self.from.is_none() && !client.is_inside_tmux() {
             return Err(crate::error::TsmError::NotInTmux);
         }
@@ -42,16 +47,13 @@ impl MoveWindowCommand {
             ));
         }
 
-        let mut history = WindowHistory::new(paths::history_file_path());
-        history.load()?;
-
         let window_address = if self.from.is_none() && self.to.is_some() {
             let current_window = client.get_current_window()?;
             Some(current_window)
         } else {
             let windows = client.list_windows()?;
 
-            let indexed_windows = sort_windows_by_history(windows, &history);
+            let indexed_windows = sort_windows_by_history(windows, &*history);
             let window_items: Vec<String> = indexed_windows
                 .iter()
                 .map(|(w, _)| format!("{}\t {}:{}", w.pane_id, w.session_name, w.index))
@@ -92,8 +94,7 @@ impl MoveWindowCommand {
                     client.attach_to_window(session.as_str(), new_window_index)?;
                 }
 
-                history.record_access(&session, new_window_index)?;
-                history.save()?;
+                history.record(&session, new_window_index)?;
 
                 if !self.quiet {
                     client.display_message(&format!(
@@ -180,9 +181,8 @@ fn parse_window_spec(spec: &str) -> Result<(String, u32)> {
 mod tests {
     use super::*;
     use crate::error::TsmError;
-    use crate::test_support::{MockPicker, MockTmux, with_env};
+    use crate::test_support::{InMemoryHistory, MockPicker, MockTmux};
     use crate::tmux::Window;
-    use tempfile::TempDir;
 
     fn win(session: &str, index: u32, pane: &str) -> Window {
         Window {
@@ -201,22 +201,15 @@ mod tests {
         }
     }
 
-    fn with_temp_history(f: impl FnOnce()) {
-        let tmp = TempDir::new().unwrap();
-        let hist = tmp.path().join("history");
-        with_env(&[("TSM_HISTORY_FILE", hist.to_str())], f);
-    }
-
     #[test]
     fn errors_with_fewer_than_two_sessions() {
         let mut mock = MockTmux::default();
         mock.sessions = vec!["dev".to_string()];
-        with_temp_history(|| {
-            let err = cmd(Some("dev:1"), Some("prod"), false)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap_err();
-            assert!(matches!(err, TsmError::InvalidArgument(_)));
-        });
+        let mut history = InMemoryHistory::new();
+        let err = cmd(Some("dev:1"), Some("prod"), false)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap_err();
+        assert!(matches!(err, TsmError::InvalidArgument(_)));
     }
 
     #[test]
@@ -232,11 +225,10 @@ mod tests {
             win("prod", 1, "%moved"),
         ];
 
-        with_temp_history(|| {
-            cmd(Some("dev:1"), Some("prod"), false)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        cmd(Some("dev:1"), Some("prod"), false)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
 
         assert!(mock.called("move_window(dev:1->prod)"));
         assert!(mock.called("switch_to_window(prod,1)"));
@@ -252,11 +244,10 @@ mod tests {
         // switches to the target first to avoid detaching.
         mock.windows = vec![win("dev", 1, "%moved"), win("prod", 5, "%moved")];
 
-        with_temp_history(|| {
-            cmd(Some("dev:1"), Some("prod"), true)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        cmd(Some("dev:1"), Some("prod"), true)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
 
         // switch_session(prod) happens before move_window in the call log.
         let calls = mock.calls();
@@ -276,11 +267,10 @@ mod tests {
             win("dev", 2, "%d2"),
             win("prod", 1, "%moved"),
         ];
-        with_temp_history(|| {
-            cmd(Some("dev:1"), Some("prod"), true)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        cmd(Some("dev:1"), Some("prod"), true)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
         assert!(mock.called("move_window(dev:1->prod)"));
         assert!(!mock.called("display_message"));
     }
@@ -298,12 +288,11 @@ mod tests {
             win("prod", 1, "%moved"),
         ];
 
-        with_temp_history(|| {
-            // from omitted, to given → the current window (dev:3) is moved.
-            cmd(None, Some("prod"), false)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap();
-        });
+        // from omitted, to given → the current window (dev:3) is moved.
+        let mut history = InMemoryHistory::new();
+        cmd(None, Some("prod"), false)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
 
         assert!(mock.called("move_window(dev:3->prod)"));
         assert!(mock.called("switch_to_window(prod,1)"));
@@ -314,12 +303,11 @@ mod tests {
         let mut mock = MockTmux::default();
         mock.inside_tmux = false;
         mock.sessions = vec!["dev".to_string(), "prod".to_string()];
-        with_temp_history(|| {
-            let err = cmd(None, Some("prod"), false)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap_err();
-            assert!(matches!(err, TsmError::NotInTmux));
-        });
+        let mut history = InMemoryHistory::new();
+        let err = cmd(None, Some("prod"), false)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap_err();
+        assert!(matches!(err, TsmError::NotInTmux));
     }
 
     #[test]
@@ -338,9 +326,10 @@ mod tests {
             Some("prod".to_string()),
         ]);
 
-        with_temp_history(|| {
-            cmd(None, None, false).run(&mock, &picker).unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        cmd(None, None, false)
+            .run(&mock, &picker, &mut history)
+            .unwrap();
 
         let shown = picker.shown();
         // The window picker lists one row per window...
@@ -356,11 +345,10 @@ mod tests {
         let mut mock = MockTmux::default();
         mock.sessions = vec!["dev".to_string(), "prod".to_string()];
         mock.windows = vec![win("dev", 1, "%d1"), win("prod", 1, "%p1")];
-        with_temp_history(|| {
-            cmd(None, None, false)
-                .run(&mock, &MockPicker::cancelling())
-                .unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        cmd(None, None, false)
+            .run(&mock, &MockPicker::cancelling(), &mut history)
+            .unwrap();
         assert!(!mock.called("move_window"));
     }
 

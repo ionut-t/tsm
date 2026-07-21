@@ -1,9 +1,8 @@
 use crate::error::Result;
-use crate::history::WindowHistory;
-use crate::history::paths;
+use crate::history::HistoryStore;
 use crate::tmux::Tmux;
 
-use super::utils::{sort_windows_by_history, switch_to_window};
+use super::utils::{record_current_window, sort_windows_by_history, switch_to_window};
 
 /// Switches to the last active window in a different session.
 ///
@@ -16,7 +15,7 @@ impl LastSessionCommand {
     /// Executes the last session command.
     ///
     /// Switches to the most recently accessed window in a different session.
-    pub fn run(&self, client: &dyn Tmux) -> Result<()> {
+    pub fn run(&self, client: &dyn Tmux, history: &mut dyn HistoryStore) -> Result<()> {
         let windows = client.list_windows()?;
 
         if windows.is_empty() {
@@ -24,9 +23,7 @@ impl LastSessionCommand {
             return Ok(());
         }
 
-        let mut history = WindowHistory::new(paths::history_file_path());
-        history.load()?;
-        history.record_current_window(client)?;
+        record_current_window(client, history)?;
 
         let filtered_windows = if client.is_inside_tmux() {
             let current_session = client.current_session()?;
@@ -38,10 +35,10 @@ impl LastSessionCommand {
             windows
         };
 
-        let indexed_windows = sort_windows_by_history(filtered_windows, &history);
+        let indexed_windows = sort_windows_by_history(filtered_windows, &*history);
 
         if let Some((window, _)) = indexed_windows.first() {
-            switch_to_window(client, window, &mut history)?;
+            switch_to_window(client, window, history)?;
         } else {
             client.display_message("No previous window found")?;
         }
@@ -53,10 +50,8 @@ impl LastSessionCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{MockTmux, with_env};
+    use crate::test_support::{InMemoryHistory, MockTmux};
     use crate::tmux::Window;
-    use std::io::Write;
-    use tempfile::TempDir;
 
     fn win(session: &str, index: u32) -> Window {
         Window {
@@ -67,18 +62,6 @@ mod tests {
         }
     }
 
-    fn with_history(entries: &[(&str, u32, u128)], f: impl FnOnce()) {
-        let tmp = TempDir::new().unwrap();
-        let hist = tmp.path().join("history");
-        {
-            let mut file = std::fs::File::create(&hist).unwrap();
-            for (s, i, ts) in entries {
-                writeln!(file, "{s}:{i}\t{ts}").unwrap();
-            }
-        }
-        with_env(&[("TSM_HISTORY_FILE", hist.to_str())], f);
-    }
-
     #[test]
     fn switches_to_most_recent_window_in_another_session() {
         let mut mock = MockTmux::default();
@@ -86,9 +69,8 @@ mod tests {
         mock.current_window = ("s".to_string(), 1);
         mock.windows = vec![win("s", 1), win("a", 1), win("b", 1)];
 
-        with_history(&[("a", 1, 200), ("b", 1, 100)], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::seeded(&[("a", 1, 200), ("b", 1, 100)]);
+        LastSessionCommand.run(&mock, &mut history).unwrap();
 
         // Current session "s" is excluded; "a" is more recent than "b".
         assert!(mock.called("switch_to_window(a,1)"));
@@ -102,9 +84,8 @@ mod tests {
         // Only current-session windows exist, all filtered out.
         mock.windows = vec![win("s", 1), win("s", 2)];
 
-        with_history(&[], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        LastSessionCommand.run(&mock, &mut history).unwrap();
         assert!(mock.called("display_message(No previous window found)"));
         assert!(!mock.called("switch_to_window"));
     }
@@ -113,39 +94,31 @@ mod tests {
     fn reports_when_no_windows_found() {
         let mut mock = MockTmux::default();
         mock.windows = vec![];
-        with_history(&[], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        LastSessionCommand.run(&mock, &mut history).unwrap();
         assert!(mock.called("display_message(No windows found)"));
     }
 
-    /// Small wall-clock gap so each navigation stamps a strictly newer time,
-    /// mirroring real use (see the note in `last_window`).
-    fn tick() {
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-
     /// Jumping s→a with `last-session`, then invoking it again, returns to s:
-    /// the most-recently-left session is always the next hop.
+    /// the most-recently-left session is always the next hop. The store's
+    /// monotonic clock makes this deterministic across the two invocations.
     #[test]
     fn toggles_between_sessions_across_invocations() {
-        with_history(&[("a", 1, 200), ("b", 1, 100)], || {
-            let mut mock = MockTmux::default();
-            mock.current_session = "s".to_string();
-            mock.current_window = ("s".to_string(), 1);
-            mock.windows = vec![win("s", 1), win("a", 1), win("b", 1)];
+        let mut mock = MockTmux::default();
+        mock.current_session = "s".to_string();
+        mock.current_window = ("s".to_string(), 1);
+        mock.windows = vec![win("s", 1), win("a", 1), win("b", 1)];
+        let mut history = InMemoryHistory::seeded(&[("a", 1, 200), ("b", 1, 100)]);
 
-            // From s, the most recent other session is a.
-            LastSessionCommand.run(&mock).unwrap();
-            assert!(mock.called("switch_to_window(a,1)"));
+        // From s, the most recent other session is a.
+        LastSessionCommand.run(&mock, &mut history).unwrap();
+        assert!(mock.called("switch_to_window(a,1)"));
 
-            // Now on a; the most recent other session is s (just left).
-            tick();
-            mock.current_session = "a".to_string();
-            mock.current_window = ("a".to_string(), 1);
-            LastSessionCommand.run(&mock).unwrap();
-            assert_eq!(mock.calls().last().unwrap(), "switch_to_window(s,1)");
-        });
+        // Now on a; the most recent other session is s (just left).
+        mock.current_session = "a".to_string();
+        mock.current_window = ("a".to_string(), 1);
+        LastSessionCommand.run(&mock, &mut history).unwrap();
+        assert_eq!(mock.calls().last().unwrap(), "switch_to_window(s,1)");
     }
 
     /// A newly created window in another session (no history) is still a valid
@@ -157,9 +130,8 @@ mod tests {
         mock.current_window = ("s".to_string(), 1);
         mock.windows = vec![win("s", 1), win("newsess", 7)];
 
-        with_history(&[], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::new();
+        LastSessionCommand.run(&mock, &mut history).unwrap();
         assert!(mock.called("switch_to_window(newsess,7)"));
     }
 
@@ -172,9 +144,8 @@ mod tests {
         mock.current_window = ("s".to_string(), 1);
         mock.windows = vec![win("s", 1), win("a", 1), win("newsess", 7)];
 
-        with_history(&[("a", 1, 500)], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::seeded(&[("a", 1, 500)]);
+        LastSessionCommand.run(&mock, &mut history).unwrap();
         assert!(mock.called("switch_to_window(a,1)"));
         assert!(!mock.called("switch_to_window(newsess,7)"));
     }
@@ -188,9 +159,8 @@ mod tests {
         mock.inside_tmux = false;
         mock.windows = vec![win("s", 1), win("a", 1)];
 
-        with_history(&[("s", 1, 300), ("a", 1, 100)], || {
-            LastSessionCommand.run(&mock).unwrap();
-        });
+        let mut history = InMemoryHistory::seeded(&[("s", 1, 300), ("a", 1, 100)]);
+        LastSessionCommand.run(&mock, &mut history).unwrap();
         assert!(mock.called("attach_to_window(s,1)"));
         assert!(!mock.called("switch_to_window"));
     }

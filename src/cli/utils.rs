@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::history::WindowHistory;
+use crate::history::HistoryStore;
 use crate::tmux::{Tmux, Window};
 
 pub const PREVIEW_CMD: &str = r#"
@@ -20,14 +20,12 @@ dir={}; dir="${dir/#\~/$HOME}"; command -v eza >/dev/null && eza --color=always 
 /// Sort windows by access time (most recent first) and return indexed list
 pub fn sort_windows_by_history(
     windows: Vec<Window>,
-    history: &WindowHistory,
+    history: &dyn HistoryStore,
 ) -> Vec<(Window, u128)> {
     let mut indexed_windows: Vec<_> = windows
         .into_iter()
         .map(|w| {
-            let last_access = history
-                .get_last_access(&w.session_name, w.index)
-                .unwrap_or(0);
+            let last_access = history.last_access(&w.session_name, w.index).unwrap_or(0);
             (w, last_access)
         })
         .collect();
@@ -35,14 +33,25 @@ pub fn sort_windows_by_history(
     indexed_windows
 }
 
+/// Record the current window's access, if we're inside tmux.
+///
+/// Lives here (the command layer) rather than on the history store so the
+/// persistence layer stays free of any tmux dependency.
+pub fn record_current_window(client: &dyn Tmux, history: &mut dyn HistoryStore) -> Result<()> {
+    if client.is_inside_tmux() {
+        let (session, index) = client.get_current_window()?;
+        history.record(&session, index)?;
+    }
+    Ok(())
+}
+
 /// Record window access and switch to it
 pub fn switch_to_window(
     client: &dyn Tmux,
     window: &Window,
-    history: &mut WindowHistory,
+    history: &mut dyn HistoryStore,
 ) -> Result<()> {
-    history.record_access(&window.session_name, window.index)?;
-    history.save()?;
+    history.record(&window.session_name, window.index)?;
 
     if client.is_inside_tmux() {
         client.switch_to_window(&window.session_name, window.index)?;
@@ -56,7 +65,7 @@ pub fn switch_to_window(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
+    use crate::test_support::InMemoryHistory;
 
     fn window(session: &str, index: u32) -> Window {
         Window {
@@ -67,24 +76,9 @@ mod tests {
         }
     }
 
-    /// Build a history with explicit, deterministic timestamps by writing the
-    /// on-disk format (`session:index\ttimestamp`) and loading it — avoids the
-    /// same-millisecond ambiguity of calling `record_access` in a tight loop.
-    fn history_from(entries: &[(&str, u32, u128)]) -> (WindowHistory, NamedTempFile) {
-        use std::io::Write;
-        let mut file = NamedTempFile::new().unwrap();
-        for (session, index, ts) in entries {
-            writeln!(file, "{}:{}\t{}", session, index, ts).unwrap();
-        }
-        file.flush().unwrap();
-        let mut history = WindowHistory::new(file.path().to_path_buf());
-        history.load().unwrap();
-        (history, file)
-    }
-
     #[test]
     fn sorts_most_recently_accessed_first() {
-        let (history, _file) = history_from(&[("a", 0, 100), ("b", 1, 300), ("c", 2, 200)]);
+        let history = InMemoryHistory::seeded(&[("a", 0, 100), ("b", 1, 300), ("c", 2, 200)]);
 
         let windows = vec![window("a", 0), window("b", 1), window("c", 2)];
         let sorted = sort_windows_by_history(windows, &history);
@@ -106,7 +100,7 @@ mod tests {
 
     #[test]
     fn windows_without_history_sort_last_with_zero_access() {
-        let (history, _file) = history_from(&[("known", 0, 500)]);
+        let history = InMemoryHistory::seeded(&[("known", 0, 500)]);
 
         let windows = vec![window("unknown", 5), window("known", 0)];
         let sorted = sort_windows_by_history(windows, &history);
@@ -119,8 +113,7 @@ mod tests {
 
     #[test]
     fn empty_input_yields_empty_output() {
-        let file = NamedTempFile::new().unwrap();
-        let history = WindowHistory::new(file.path().to_path_buf());
+        let history = InMemoryHistory::new();
         assert!(sort_windows_by_history(vec![], &history).is_empty());
     }
 }

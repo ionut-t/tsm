@@ -57,8 +57,59 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::error::{Result, TsmError};
 use crate::fzf::{Picker, PickerOptions};
+use crate::history::HistoryStore;
 use crate::tmux::{Tmux, Window};
 use crate::zoxide::DirectorySource;
+
+/// In-memory [`HistoryStore`] double.
+///
+/// Timestamps come from a monotonic counter rather than the wall clock, so each
+/// `record` is strictly newer than the last — making history-ordering tests
+/// deterministic and instant, with no filesystem and no `sleep()`.
+pub struct InMemoryHistory {
+    entries: HashMap<String, u128>,
+    next: u128,
+}
+
+impl InMemoryHistory {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            next: 1,
+        }
+    }
+
+    /// Pre-populate with `(session, window_index, timestamp)` entries. The
+    /// internal clock starts just above the largest seed, so later `record`s
+    /// always outrank the seeds.
+    pub fn seeded(entries: &[(&str, u32, u128)]) -> Self {
+        let mut map = HashMap::new();
+        let mut max = 0;
+        for (session, index, ts) in entries {
+            map.insert(format!("{session}:{index}"), *ts);
+            max = max.max(*ts);
+        }
+        Self {
+            entries: map,
+            next: max + 1,
+        }
+    }
+}
+
+impl HistoryStore for InMemoryHistory {
+    fn last_access(&self, session: &str, window_index: u32) -> Option<u128> {
+        self.entries
+            .get(&format!("{session}:{window_index}"))
+            .copied()
+    }
+
+    fn record(&mut self, session: &str, window_index: u32) -> Result<()> {
+        let ts = self.next;
+        self.next += 1;
+        self.entries.insert(format!("{session}:{window_index}"), ts);
+        Ok(())
+    }
+}
 
 /// In-memory [`DirectorySource`] double returning a fixed directory list (or a
 /// failure), so `new`'s directory-selection flow can be tested without zoxide.

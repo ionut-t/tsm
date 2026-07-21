@@ -1,8 +1,4 @@
-use crate::{
-    error::Result,
-    history::{WindowHistory, paths},
-    tmux::Tmux,
-};
+use crate::{error::Result, history::HistoryStore, tmux::Tmux};
 
 /// Records the current window access in the history file.
 ///
@@ -14,17 +10,13 @@ impl RecordCommand {
     /// Executes the record command.
     ///
     /// Records the current window access time in the history file.
-    pub fn run(&self, client: &dyn Tmux) -> Result<()> {
+    pub fn run(&self, client: &dyn Tmux, history: &mut dyn HistoryStore) -> Result<()> {
         if !client.is_inside_tmux() {
             return Ok(());
         }
 
         let (session, window) = client.get_current_window()?;
-
-        let mut history = WindowHistory::new(paths::history_file_path());
-        history.load()?;
-        history.record_access(&session, window)?;
-        history.save()?;
+        history.record(&session, window)?;
 
         Ok(())
     }
@@ -33,36 +25,27 @@ impl RecordCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{MockTmux, with_env};
-    use tempfile::TempDir;
+    use crate::test_support::{InMemoryHistory, MockTmux};
 
     #[test]
     fn does_nothing_when_outside_tmux() {
-        let tmp = TempDir::new().unwrap();
-        let hist = tmp.path().join("history");
         let mut mock = MockTmux::default();
         mock.inside_tmux = false;
+        mock.current_window = ("dev".to_string(), 4);
 
-        with_env(&[("TSM_HISTORY_FILE", hist.to_str())], || {
-            RecordCommand.run(&mock).unwrap();
-        });
-        // No history file is written when not inside tmux.
-        assert!(!hist.exists());
+        let mut history = InMemoryHistory::new();
+        RecordCommand.run(&mock, &mut history).unwrap();
+        // Nothing is recorded when not inside tmux.
+        assert!(history.last_access("dev", 4).is_none());
     }
 
     #[test]
     fn records_current_window_to_history() {
-        let tmp = TempDir::new().unwrap();
-        let hist = tmp.path().join("history");
         let mut mock = MockTmux::default();
         mock.current_window = ("dev".to_string(), 4);
 
-        with_env(&[("TSM_HISTORY_FILE", hist.to_str())], || {
-            RecordCommand.run(&mock).unwrap();
-
-            let mut reloaded = WindowHistory::new(hist.clone());
-            reloaded.load().unwrap();
-            assert!(reloaded.get_last_access("dev", 4).is_some());
-        });
+        let mut history = InMemoryHistory::new();
+        RecordCommand.run(&mock, &mut history).unwrap();
+        assert!(history.last_access("dev", 4).is_some());
     }
 }

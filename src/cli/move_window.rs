@@ -39,7 +39,7 @@ impl MoveWindowCommand {
             return Err(crate::error::TsmError::NotInTmux);
         }
 
-        let sessions = client.list_sessions();
+        let sessions = client.list_sessions()?;
 
         if sessions.len() < 2 {
             return Err(crate::error::TsmError::InvalidArgument(

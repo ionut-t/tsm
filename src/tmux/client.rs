@@ -53,7 +53,12 @@ pub trait Tmux {
 
     fn current_session(&self) -> Result<String>;
 
-    fn list_sessions(&self) -> Vec<String>;
+    /// List session names, most-recently-attached first.
+    ///
+    /// Spawn failure (e.g. tmux not installed) propagates as an error; a
+    /// non-zero tmux exit (no server running) is not an error — it yields an
+    /// empty list, so bootstrap flows like `tsm new` still work from scratch.
+    fn list_sessions(&self) -> Result<Vec<String>>;
 
     fn list_windows(&self) -> Result<Vec<Window>>;
 
@@ -169,40 +174,46 @@ impl TmuxClient {
         }
     }
 
-    fn list_sorted_sessions(&self) -> Vec<(String, u64)> {
-        let mut sessions = self
+    fn list_sorted_sessions(&self) -> Result<Vec<(String, u64)>> {
+        let output = self
             .tmux_cmd()
             .arg("list-sessions")
             .arg("-F")
             .arg("#{session_name}:#{session_last_attached}")
-            .output()
-            .map(|output| {
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    stdout
-                        .lines()
-                        .filter_map(|line| {
-                            let mut parts = line.splitn(2, ':');
-                            if let (Some(name), Some(timestamp)) = (parts.next(), parts.next()) {
-                                if let Ok(time) = timestamp.trim().parse::<u64>() {
-                                    Some((name.to_string(), time))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                } else {
-                    vec![]
-                }
-            })
-            .unwrap_or_else(|_| vec![]);
+            .output()?; // spawn failure (e.g. tmux not installed) propagates.
+
+        // A non-zero exit is the normal "no server running" case (`tmux
+        // list-sessions` exits 1 with no server) — that means zero sessions,
+        // NOT an error. Treating it as an error would break `tsm new`, which
+        // lists sessions before starting the first one from scratch.
+        let mut sessions = if output.status.success() {
+            parse_session_lines(&String::from_utf8_lossy(&output.stdout))
+        } else {
+            Vec::new()
+        };
 
         sessions.sort_by_key(|s| std::cmp::Reverse(s.1));
-        sessions
+        Ok(sessions)
     }
+}
+
+/// Parse `tmux list-sessions -F '#{session_name}:#{session_last_attached}'`
+/// output into `(name, last_attached)` pairs, skipping any malformed line.
+fn parse_session_lines(stdout: &str) -> Vec<(String, u64)> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(2, ':');
+            match (parts.next(), parts.next()) {
+                (Some(name), Some(timestamp)) => timestamp
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+                    .map(|time| (name.to_string(), time)),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 impl Tmux for TmuxClient {
@@ -431,11 +442,12 @@ impl Tmux for TmuxClient {
         }
     }
 
-    fn list_sessions(&self) -> Vec<String> {
-        self.list_sorted_sessions()
+    fn list_sessions(&self) -> Result<Vec<String>> {
+        Ok(self
+            .list_sorted_sessions()?
             .into_iter()
             .map(|(name, _)| name)
-            .collect()
+            .collect())
     }
 
     fn list_windows(&self) -> Result<Vec<Window>> {
@@ -600,7 +612,7 @@ impl Tmux for TmuxClient {
             let current = self.current_session().ok();
 
             if current.as_deref() == Some(session) {
-                let sessions = self.list_sorted_sessions();
+                let sessions = self.list_sorted_sessions()?;
 
                 if let Some((prev_session, _)) = sessions.iter().find(|(name, _)| name != session) {
                     self.switch_session(prev_session)?;
@@ -904,6 +916,34 @@ mod tests {
         let env = HashMap::from([("K".to_string(), "a=b c".to_string())]);
         TmuxClient::add_env_args(&mut cmd, &env);
         assert_eq!(args_of(&cmd), vec!["-e", "K=a=b c"]);
+    }
+
+    #[test]
+    fn parse_session_lines_extracts_name_and_timestamp() {
+        let out = "work:1700000000\nplay:1699999999\n";
+        assert_eq!(
+            parse_session_lines(out),
+            vec![
+                ("work".to_string(), 1_700_000_000),
+                ("play".to_string(), 1_699_999_999),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_session_lines_keeps_only_the_first_colon_as_separator() {
+        // Session names may contain colons; splitn(2) keeps the rest as the
+        // timestamp field, which then fails to parse and drops the line.
+        assert_eq!(
+            parse_session_lines("a:b:1700000000\ngood:5\n"),
+            vec![("good".to_string(), 5)]
+        );
+    }
+
+    #[test]
+    fn parse_session_lines_skips_malformed_and_empty_lines() {
+        let out = "\nnocolon\nname:notanumber\n\nok:42\n";
+        assert_eq!(parse_session_lines(out), vec![("ok".to_string(), 42)]);
     }
 
     #[test]

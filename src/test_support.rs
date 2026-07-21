@@ -199,6 +199,9 @@ impl Picker for MockPicker {
 pub struct MockTmux {
     pub inside_tmux: bool,
     pub sessions: Vec<String>,
+    /// When set, `list_sessions` fails (models tmux missing / spawn failure),
+    /// so tests can assert a command surfaces the error instead of swallowing it.
+    pub fail_list_sessions: bool,
     pub windows: Vec<Window>,
     pub current_session: String,
     /// Returned by `get_current_window` / `get_current_window_index`.
@@ -220,6 +223,7 @@ impl Default for MockTmux {
         Self {
             inside_tmux: true,
             sessions: Vec::new(),
+            fail_list_sessions: false,
             windows: Vec::new(),
             current_session: String::new(),
             current_window: (String::new(), 0),
@@ -332,8 +336,11 @@ impl Tmux for MockTmux {
         Ok(self.current_session.clone())
     }
 
-    fn list_sessions(&self) -> Vec<String> {
-        self.sessions.clone()
+    fn list_sessions(&self) -> Result<Vec<String>> {
+        if self.fail_list_sessions {
+            return Err(TsmError::TmuxCommand("tmux not found".to_string()));
+        }
+        Ok(self.sessions.clone())
     }
 
     fn list_windows(&self) -> Result<Vec<Window>> {

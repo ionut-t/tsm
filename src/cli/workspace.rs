@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::cli::utils::shell_quote;
 use crate::error::{Result, TsmError};
 use crate::fzf::{Picker, PickerOptions};
 use crate::tmux::Tmux;
@@ -168,7 +169,7 @@ fn pick_workspace(prompt: &str, picker: &dyn Picker) -> Result<Option<String>> {
     let dir = workspaces_dir();
     let preview_cmd = format!(
         "bat --color=always --style=plain {}/{{}}.toml",
-        dir.display()
+        shell_quote(&dir.display().to_string())
     );
 
     let options = PickerOptions::new()

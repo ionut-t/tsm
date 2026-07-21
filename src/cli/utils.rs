@@ -17,6 +17,25 @@ pub const PREVIEW_LS_TREE_CMD: &str = r#"
 dir={}; dir="${dir/#\~/$HOME}"; command -v eza >/dev/null && eza --color=always --icons=always --tree --level=1 --group-directories-first "$dir" || ls "$dir"
 "#;
 
+/// POSIX-shell-quote a string for safe interpolation into an fzf `--preview`
+/// command (fzf runs these through `sh -c`).
+///
+/// Wraps the value in single quotes and escapes any embedded single quote as
+/// `'\''`, so paths containing spaces or shell metacharacters can't break out
+/// of or alter the command. fzf already quotes its own `{}`/`{n}` placeholders;
+/// only the segments we splice in need this.
+///
+/// Deliberately hand-rolled rather than pulling in a crate (e.g. `shell-escape`):
+/// single-quote quoting is a complete, unambiguous algorithm — the only byte
+/// that can't appear literally inside `'…'` is `'` itself, handled here — so
+/// there's no edge-case tail for a dependency to cover. fzf always uses `sh -c`,
+/// so POSIX rules are exactly right; we don't need a crate's cross-shell
+/// (cmd.exe/PowerShell) handling, and this stays smaller and more auditable than
+/// a new supply-chain + compile-time dependency for three lines.
+pub fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 /// Sort windows by access time (most recent first) and return indexed list
 pub fn sort_windows_by_history(
     windows: Vec<Window>,
@@ -66,6 +85,25 @@ pub fn switch_to_window(
 mod tests {
     use super::*;
     use crate::test_support::InMemoryHistory;
+
+    #[test]
+    fn shell_quote_wraps_plain_strings() {
+        assert_eq!(shell_quote("/home/user/.config"), "'/home/user/.config'");
+    }
+
+    #[test]
+    fn shell_quote_preserves_spaces_and_metacharacters() {
+        assert_eq!(
+            shell_quote("/tmp/my configs; rm -rf /"),
+            "'/tmp/my configs; rm -rf /'"
+        );
+    }
+
+    #[test]
+    fn shell_quote_escapes_embedded_single_quotes() {
+        // A single quote must close, escape, and reopen: `'\''`.
+        assert_eq!(shell_quote("it's"), r#"'it'\''s'"#);
+    }
 
     fn window(session: &str, index: u32) -> Window {
         Window {

@@ -3,7 +3,12 @@ use std::process::{Command, Stdio};
 
 use crate::error::Result;
 
-pub struct FzfPicker {
+/// Display configuration for a single fuzzy-finder selection.
+///
+/// Built with the `with_*` methods and handed to [`Picker::pick`]. Kept separate
+/// from the [`Picker`] implementation so commands can be tested against an
+/// in-memory picker without spawning `fzf`.
+pub struct PickerOptions {
     prompt: String,
     preview_command: Option<String>,
     preview_window: String,
@@ -13,13 +18,17 @@ pub struct FzfPicker {
     border: Option<String>,
     border_label: Option<String>,
     preview_label: Option<String>,
-    margin: Option<String>,
-    padding: Option<String>,
     header: Option<String>,
     no_hscroll: bool,
 }
 
-impl FzfPicker {
+impl Default for PickerOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PickerOptions {
     pub fn new() -> Self {
         Self {
             prompt: "Select an item: ".to_string(),
@@ -31,8 +40,6 @@ impl FzfPicker {
             border: None,
             border_label: None,
             preview_label: None,
-            margin: None,
-            padding: None,
             header: None,
             no_hscroll: false,
         }
@@ -100,54 +107,69 @@ impl FzfPicker {
         self.nth = Some(nth.to_string());
         self
     }
+}
 
-    pub fn pick(&self, items: &[String]) -> Result<Option<String>> {
+/// Presents a list of items and returns the user's choice.
+///
+/// The real implementation ([`FzfPicker`]) shells out to `fzf`; tests use an
+/// in-memory double.
+pub trait Picker {
+    /// Present `items` configured by `options`, returning the selected line, or
+    /// `None` if the user cancelled the selection.
+    fn pick(&self, options: &PickerOptions, items: &[String]) -> Result<Option<String>>;
+}
+
+/// [`Picker`] backed by the `fzf` binary.
+#[derive(Default)]
+pub struct FzfPicker;
+
+impl FzfPicker {
+    pub fn new() -> Self {
+        FzfPicker
+    }
+}
+
+impl Picker for FzfPicker {
+    fn pick(&self, options: &PickerOptions, items: &[String]) -> Result<Option<String>> {
         let mut fzf = Command::new("fzf");
-        fzf.arg("--ansi").arg(format!("--prompt={}", self.prompt));
+        fzf.arg("--ansi")
+            .arg(format!("--prompt={}", options.prompt));
 
-        if let Some(border) = &self.border {
+        if let Some(border) = &options.border {
             fzf.arg(format!("--border={}", border));
         }
 
-        if let Some(label) = &self.border_label {
+        if let Some(label) = &options.border_label {
             fzf.arg(format!("--border-label={}", label));
         }
 
-        if let Some(margin) = &self.margin {
-            fzf.arg(format!("--margin={}", margin));
-        }
-
-        if let Some(padding) = &self.padding {
-            fzf.arg(format!("--padding={}", padding));
-        }
-
-        if let Some(header) = &self.header {
+        if let Some(header) = &options.header {
             fzf.arg(format!("--header={}", header));
         }
 
-        if self.no_hscroll {
+        if options.no_hscroll {
             fzf.arg("--no-hscroll");
         }
 
-        if let Some(delimiter) = &self.delimiter {
+        if let Some(delimiter) = &options.delimiter {
             fzf.arg("--delimiter").arg(delimiter);
         }
 
-        if let Some(nth) = &self.with_nth {
+        if let Some(nth) = &options.with_nth {
             fzf.arg("--with-nth").arg(nth);
         }
 
-        if let Some(nth) = &self.nth {
+        if let Some(nth) = &options.nth {
             fzf.arg("--nth").arg(nth);
         }
 
-        if let Some(preview_cmd) = &self.preview_command {
+        if let Some(preview_cmd) = &options.preview_command {
             fzf.arg("--preview")
                 .arg(preview_cmd)
                 .arg("--preview-window")
-                .arg(&self.preview_window);
+                .arg(&options.preview_window);
 
-            if let Some(label) = &self.preview_label {
+            if let Some(label) = &options.preview_label {
                 fzf.arg(format!("--preview-label={}", label));
             }
         }

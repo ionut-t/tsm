@@ -6,9 +6,12 @@ mod tmux;
 mod workspace;
 mod zoxide;
 
+#[cfg(test)]
+mod test_support;
+
 use clap::Parser;
 use cli::Cli;
-use tmux::TmuxClient;
+use tmux::{Tmux, TmuxClient};
 
 fn main() -> error::Result<()> {
     let cli = Cli::parse();

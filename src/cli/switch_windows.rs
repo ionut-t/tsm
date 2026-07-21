@@ -49,7 +49,7 @@ impl SwitchWindowCommand {
                 (w, last_access)
             })
             .collect();
-        indexed_windows.sort_by(|a, b| b.1.cmp(&a.1));
+        indexed_windows.sort_by_key(|w| std::cmp::Reverse(w.1));
         let windows: Vec<_> = indexed_windows.into_iter().map(|(w, _)| w).collect();
 
         // Align the session and window-name columns so rows can be scanned vertically.

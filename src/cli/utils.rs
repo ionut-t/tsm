@@ -31,7 +31,7 @@ pub fn sort_windows_by_history(
             (w, last_access)
         })
         .collect();
-    indexed_windows.sort_by(|a, b| b.1.cmp(&a.1));
+    indexed_windows.sort_by_key(|w| std::cmp::Reverse(w.1));
     indexed_windows
 }
 

@@ -1,4 +1,5 @@
 use std::io;
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -11,6 +12,9 @@ pub enum TsmError {
 
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
+
+    #[error("failed to save history to {path}: {source}")]
+    HistoryPersist { path: PathBuf, source: io::Error },
 
     #[error("failed to execute fzf command: {0}")]
     Fzf(String),
@@ -78,6 +82,18 @@ mod tests {
         assert_eq!(
             TsmError::WorkspaceAlreadyExists("dev".into()).to_string(),
             "Workspace 'dev' already exists"
+        );
+    }
+
+    #[test]
+    fn history_persist_names_the_target_path() {
+        let err = TsmError::HistoryPersist {
+            path: std::path::PathBuf::from("/home/user/.config/tsm/history"),
+            source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        };
+        assert_eq!(
+            err.to_string(),
+            "failed to save history to /home/user/.config/tsm/history: denied"
         );
     }
 

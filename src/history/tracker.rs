@@ -1,8 +1,10 @@
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use tempfile::NamedTempFile;
 
 use crate::error::TsmError;
 
@@ -64,37 +66,33 @@ impl WindowHistory {
         entries.sort_by(|a, b| b.1.cmp(a.1)); // Sort by timestamp descending
         entries.truncate(100);
 
-        // Acquire lock before opening file to prevent race conditions
-        #[cfg(unix)]
-        let _guard = {
-            let lock_path = self.file_path.with_extension("lock");
-            let mut attempts = 0;
-            loop {
-                match OpenOptions::new()
-                    .write(true)
-                    .create_new(true) // Fails if file already exists
-                    .open(&lock_path)
-                {
-                    Ok(_) => break LockGuard { path: lock_path },
-                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && attempts < 10 => {
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                        attempts += 1;
-                    }
-                    Err(e) => return Err(TsmError::Io(e)),
-                }
-            }
-        };
-
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&self.file_path)?;
+        // Write to a temp file in the same directory, then atomically rename it
+        // over the target. A crash mid-write leaves the original file untouched,
+        // so a reader always sees either the complete old or complete new file —
+        // never a torn one. The rename is also what makes concurrent writers
+        // safe: each writes its own temp file and renames, so the loser is fully
+        // overwritten (last-writer-wins) rather than interleaved. That is the
+        // correct outcome for this regenerable access-time cache, so no lock is
+        // needed. The temp file must share the target's directory so the rename
+        // stays on one filesystem (a cross-device rename is not atomic and would
+        // fall back to a copy).
+        let dir = self
+            .file_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let mut tmp = NamedTempFile::new_in(&dir)?;
 
         for (window_id, timestamp) in entries {
-            writeln!(file, "{}\t{}", window_id, timestamp)?;
+            writeln!(tmp, "{}\t{}", window_id, timestamp)?;
         }
-        file.sync_all()?;
+        tmp.as_file().sync_all()?;
+        tmp.persist(&self.file_path)
+            .map_err(|e| TsmError::HistoryPersist {
+                path: self.file_path.clone(),
+                source: e.error,
+            })?;
         Ok(())
     }
 
@@ -124,19 +122,6 @@ impl HistoryStore for WindowHistory {
     fn record(&mut self, session: &str, window_index: u32) -> Result<()> {
         self.record_access(session, window_index)?;
         self.save()
-    }
-}
-
-// RAII guard for lock file cleanup
-#[cfg(unix)]
-struct LockGuard {
-    path: PathBuf,
-}
-
-#[cfg(unix)]
-impl Drop for LockGuard {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -240,6 +225,34 @@ mod tests {
         // The newest survive.
         assert_eq!(reloaded.get_last_access("s", 149), Some(1_149));
         assert_eq!(reloaded.get_last_access("s", 50), Some(1_050));
+    }
+
+    #[test]
+    fn save_overwrites_existing_file_and_leaves_no_stray_files() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("history");
+
+        let mut first = WindowHistory::new(path.clone());
+        first.entries.insert("old:1".to_string(), 100);
+        first.save().unwrap();
+
+        // A second save with a disjoint set replaces the file wholesale via the
+        // atomic rename; the old entry must be gone, not merged.
+        let mut second = WindowHistory::new(path.clone());
+        second.entries.insert("new:1".to_string(), 200);
+        second.save().unwrap();
+
+        let mut reloaded = WindowHistory::new(path.clone());
+        reloaded.load().unwrap();
+        assert_eq!(reloaded.get_last_access("new", 1), Some(200));
+        assert_eq!(reloaded.get_last_access("old", 1), None);
+
+        // Only the history file survives — the temp file was renamed away.
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(leftovers, vec![std::ffi::OsString::from("history")]);
     }
 
     #[test]

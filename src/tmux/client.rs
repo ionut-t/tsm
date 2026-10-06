@@ -1,4 +1,4 @@
-use super::Window;
+use super::{KeyBinding, Window};
 use crate::error::{Result, TsmError};
 use std::collections::HashMap;
 use std::process::Command;
@@ -107,7 +107,32 @@ pub trait Tmux {
     fn is_last_window_in_session(&self, session: &str) -> Result<bool>;
 
     fn display_message(&self, message: &str) -> Result<()>;
+
+    /// The server's prefix key (e.g. `C-b`).
+    ///
+    /// Spawn failure propagates as an error; a non-zero tmux exit (no server
+    /// running) yields `None`. Unlike `list-keys`, `show-options` never starts
+    /// a server, so this doubles as the "is a server running?" check.
+    fn prefix_key(&self) -> Result<Option<String>>;
+
+    /// Every binding in the `prefix` and `root` tables of the running server.
+    ///
+    /// `tmux list-keys` starts a server (loading the user's config) when none
+    /// is running, so only call this once [`Tmux::prefix_key`] returned `Some`.
+    fn list_key_bindings(&self) -> Result<Vec<KeyBinding>>;
+
+    /// tmux's built-in bindings for the `prefix` and `root` tables, read from a
+    /// throwaway server started with no config. Diffing against these isolates
+    /// the bindings the user's config added or changed.
+    fn default_key_bindings(&self) -> Result<Vec<KeyBinding>>;
 }
+
+/// Tables covered by the key-binding queries.
+const KEY_TABLES: [&str; 2] = ["prefix", "root"];
+
+/// `list-keys -F` format: tab-separated, with the command last so any tab
+/// inside it stays part of the command field.
+const KEY_FORMAT: &str = "#{key_table}\t#{key_string}\t#{key_note}\t#{key_command}";
 
 impl TmuxClient {
     pub fn new() -> Self {
@@ -195,6 +220,53 @@ impl TmuxClient {
         sessions.sort_by_key(|s| std::cmp::Reverse(s.1));
         Ok(sessions)
     }
+
+    /// Append `list-keys -T <table> -F <fmt>` for each of [`KEY_TABLES`],
+    /// joined into a single tmux invocation with `;`.
+    fn add_list_keys_args(cmd: &mut Command) {
+        for (i, table) in KEY_TABLES.iter().enumerate() {
+            if i > 0 {
+                cmd.arg(";");
+            }
+            cmd.args(["list-keys", "-T", table, "-F", KEY_FORMAT]);
+        }
+    }
+
+    /// Run a `list-keys` command and parse its output.
+    fn run_list_keys(mut cmd: Command) -> Result<Vec<KeyBinding>> {
+        let output = cmd.output()?;
+        if output.status.success() {
+            Ok(parse_key_lines(&String::from_utf8_lossy(&output.stdout)))
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+}
+
+/// Parse `tmux list-keys -F` output in [`KEY_FORMAT`] into bindings, skipping
+/// any malformed line.
+fn parse_key_lines(stdout: &str) -> Vec<KeyBinding> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(4, '\t');
+            match (parts.next(), parts.next(), parts.next(), parts.next()) {
+                (Some(table), Some(key), Some(note), Some(command))
+                    if !table.is_empty() && !key.is_empty() =>
+                {
+                    Some(KeyBinding {
+                        table: table.to_string(),
+                        key: key.to_string(),
+                        note: note.to_string(),
+                        command: command.to_string(),
+                    })
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 /// Parse `tmux list-sessions -F '#{session_name}:#{session_last_attached}'`
@@ -873,6 +945,46 @@ impl Tmux for TmuxClient {
             ))
         }
     }
+
+    fn prefix_key(&self) -> Result<Option<String>> {
+        let output = self
+            .tmux_cmd()
+            .args(["show-options", "-gv", "prefix"])
+            .output()?;
+
+        if output.status.success() {
+            let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok((!prefix.is_empty()).then_some(prefix))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn list_key_bindings(&self) -> Result<Vec<KeyBinding>> {
+        let mut cmd = self.tmux_cmd();
+        Self::add_list_keys_args(&mut cmd);
+        Self::run_list_keys(cmd)
+    }
+
+    fn default_key_bindings(&self) -> Result<Vec<KeyBinding>> {
+        // A private socket in a temp dir keeps the probe server away from the
+        // user's real one, and the dir (socket included) is removed on drop.
+        // `$TMUX` is cleared too so nothing can route the probe to the server
+        // tsm is running inside.
+        let dir = tempfile::tempdir()?;
+        let socket = dir.path().join("s");
+
+        let mut cmd = self.tmux_cmd();
+        cmd.env_remove("TMUX").arg("-S").arg(&socket).args([
+            "-f",
+            "/dev/null",
+            "start-server",
+            ";",
+        ]);
+        Self::add_list_keys_args(&mut cmd);
+        cmd.args([";", "kill-server"]);
+        Self::run_list_keys(cmd)
+    }
 }
 
 #[cfg(test)]
@@ -944,6 +1056,43 @@ mod tests {
     fn parse_session_lines_skips_malformed_and_empty_lines() {
         let out = "\nnocolon\nname:notanumber\n\nok:42\n";
         assert_eq!(parse_session_lines(out), vec![("ok".to_string(), 42)]);
+    }
+
+    #[test]
+    fn parse_key_lines_extracts_all_fields() {
+        let out = "prefix\tr\tReload config\tsource-file ~/.tmux.conf\n\
+                   root\tM-Left\t\tselect-pane -L\n";
+        assert_eq!(
+            parse_key_lines(out),
+            vec![
+                KeyBinding {
+                    table: "prefix".into(),
+                    key: "r".into(),
+                    note: "Reload config".into(),
+                    command: "source-file ~/.tmux.conf".into(),
+                },
+                KeyBinding {
+                    table: "root".into(),
+                    key: "M-Left".into(),
+                    note: String::new(),
+                    command: "select-pane -L".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_key_lines_keeps_tabs_inside_the_command() {
+        let bindings = parse_key_lines("prefix\tx\t\tsend-keys a\tb\n");
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].command, "send-keys a\tb");
+    }
+
+    #[test]
+    fn parse_key_lines_skips_malformed_and_empty_lines() {
+        let out = "\nprefix\tonly-two\n\tr\t\tcmd\nprefix\t;\t\tlast-pane\n";
+        let keys: Vec<String> = parse_key_lines(out).into_iter().map(|b| b.key).collect();
+        assert_eq!(keys, vec![";".to_string()]);
     }
 
     #[test]

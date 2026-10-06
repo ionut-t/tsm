@@ -273,7 +273,7 @@ fn key_entries(tmux: &dyn Tmux) -> (Option<String>, Vec<Entry>) {
 
     let entries = match (tmux.list_key_bindings(), tmux.default_key_bindings()) {
         (Ok(current), Ok(defaults)) => custom_bindings(current, &defaults)
-            .iter()
+            .into_iter()
             .map(|b| key_entry(&prefix, b))
             .collect(),
         _ => Vec::new(),
@@ -296,7 +296,7 @@ fn custom_bindings(current: Vec<KeyBinding>, defaults: &[KeyBinding]) -> Vec<Key
         .collect()
 }
 
-fn key_entry(prefix: &str, binding: &KeyBinding) -> Entry {
+fn key_entry(prefix: &str, binding: KeyBinding) -> Entry {
     let name = binding
         .command
         .split_whitespace()
@@ -307,9 +307,9 @@ fn key_entry(prefix: &str, binding: &KeyBinding) -> Entry {
         kind: "key",
         id: format!("{} {}", binding.table, binding.key),
         name,
-        alias: key_display(prefix, binding),
-        description: binding.note.clone(),
-        detail: binding.command.clone(),
+        alias: key_display(prefix, &binding),
+        description: binding.note,
+        detail: binding.command,
     }
 }
 
@@ -544,7 +544,7 @@ mod tests {
     fn key_entry_describes_with_the_note_and_keeps_the_command_as_detail() {
         let noted = key_entry(
             "C-a",
-            &binding("prefix", "r", "Reload", "source-file ~/.tmux.conf"),
+            binding("prefix", "r", "Reload", "source-file ~/.tmux.conf"),
         );
         assert_eq!(noted.kind, "key");
         assert_eq!(noted.id, "prefix r");
@@ -553,7 +553,7 @@ mod tests {
         assert_eq!(noted.description, "Reload");
         assert_eq!(noted.detail, "source-file ~/.tmux.conf");
 
-        let bare = key_entry("C-a", &binding("root", "M-Left", "", "select-pane -L"));
+        let bare = key_entry("C-a", binding("root", "M-Left", "", "select-pane -L"));
         assert_eq!(bare.id, "root M-Left");
         assert_eq!(bare.description, "");
         assert_eq!(bare.detail, "select-pane -L");
@@ -574,14 +574,14 @@ mod tests {
 
     #[test]
     fn row_puts_the_description_in_the_searched_field_only() {
-        let noted = key_entry("C-a", &binding("prefix", "r", "Reload", "source-file x"));
+        let noted = key_entry("C-a", binding("prefix", "r", "Reload", "source-file x"));
         let fields: Vec<String> = row(&noted, 5, 11).split('\t').map(strip_ansi).collect();
         assert_eq!(fields[0], "key");
         assert_eq!(fields[1], "prefix r");
         assert_eq!(fields[3], "", "a noted binding shows no raw command");
         assert_eq!(fields[4], "Reload");
 
-        let bare = key_entry("C-a", &binding("prefix", "%", "", "split-window -h"));
+        let bare = key_entry("C-a", binding("prefix", "%", "", "split-window -h"));
         let fields: Vec<String> = row(&bare, 5, 11).split('\t').map(strip_ansi).collect();
         assert_eq!(fields[3], " split-window -h");
         assert_eq!(
@@ -598,10 +598,10 @@ mod tests {
             let r = strip_ansi(&row(e, 5, 12));
             r.splitn(3, '\t').nth(2).unwrap().replace('\t', " ")
         };
-        let noted = shown(&key_entry("C-a", &binding("prefix", "r", "Reload", "x")));
+        let noted = shown(&key_entry("C-a", binding("prefix", "r", "Reload", "x")));
         let bare = shown(&key_entry(
             "C-a",
-            &binding("prefix", "%", "", "split-window"),
+            binding("prefix", "%", "", "split-window"),
         ));
         // `rfind`: the command name column also reads `split-window`.
         assert_eq!(noted.find("Reload"), bare.rfind("split-window"));

@@ -102,7 +102,9 @@ Most commands have short aliases:
 
 ## Command Palette (`tsm help`)
 
-It opens a fuzzy picker listing **every tsm subcommand** _and_ **every tmux command**, each with a short description. Type to filter; the live preview shows tldr-style usage examples plus the full syntax. Hit `Enter` to print the selected command's examples to the terminal.
+It opens a fuzzy picker listing **every tsm subcommand**, **your own tmux key bindings**, _and_ **every tmux command**, each with a short description. Type to filter; the live preview shows tldr-style usage examples plus the full syntax. Hit `Enter` to print the selected command's examples to the terminal.
+
+The prefix key is shown in the picker's border, and every binding the config adds or changes in the `prefix` and `root` tables is listed as `C-a r  source-file …`. Custom bindings are found by diffing the running server's bindings against tmux's built-in defaults, so plugin bindings (TPM etc.) and `source-file`'d configs are included. Add a note with `bind -N "Reload config" r …` and it becomes the description. Search matches command names, aliases and descriptions; a binding without a note shows its raw command instead, which is not searched. Bindings only appear when a tmux server is running.
 
 ```bash
 tsm help        # or `tsm h`

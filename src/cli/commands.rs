@@ -101,7 +101,7 @@ impl Cli {
                 cmd.run();
                 Ok(())
             }
-            Commands::Help(cmd) => cmd.run(&picker),
+            Commands::Help(cmd) => cmd.run(&client, &picker),
         }
     }
 }

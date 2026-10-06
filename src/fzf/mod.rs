@@ -20,6 +20,7 @@ pub struct PickerOptions {
     preview_label: Option<String>,
     header: Option<String>,
     no_hscroll: bool,
+    tabstop: Option<u8>,
 }
 
 impl Default for PickerOptions {
@@ -42,6 +43,7 @@ impl PickerOptions {
             preview_label: None,
             header: None,
             no_hscroll: false,
+            tabstop: None,
         }
     }
 
@@ -89,6 +91,14 @@ impl PickerOptions {
     /// column layouts stay put instead of shifting to reveal the match.
     pub fn no_hscroll(mut self) -> Self {
         self.no_hscroll = true;
+        self
+    }
+
+    /// Width a tab renders at (fzf's `--tabstop`). `1` turns tab-delimited
+    /// fields into plain one-column separators, so padded columns align exactly
+    /// even when a field is empty.
+    pub fn with_tabstop(mut self, width: u8) -> Self {
+        self.tabstop = Some(width);
         self
     }
 
@@ -149,6 +159,10 @@ impl Picker for FzfPicker {
 
         if options.no_hscroll {
             fzf.arg("--no-hscroll");
+        }
+
+        if let Some(width) = options.tabstop {
+            fzf.arg(format!("--tabstop={}", width));
         }
 
         if let Some(delimiter) = &options.delimiter {

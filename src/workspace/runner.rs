@@ -161,9 +161,13 @@ impl<'a> WorkspaceRunner<'a> {
 
         // The row's first pane already exists with its env applied at creation.
         // Spawn the rest, each with its own effective env via tmux's -e flag.
+        // Split off the most recent pane: tmux places the new pane directly
+        // right of its target, so splitting the first pane each time would
+        // reverse the order of every pane after it.
         for pane in panes.iter().skip(1) {
+            let last_pane_id = pane_ids.last().expect("pane_ids starts non-empty").clone();
             let new_pane_id = self.client.split_horizontal(
-                &pane_ids[0],
+                &last_pane_id,
                 Some(path),
                 None,
                 &pane_env(window_env, Some(pane)),
@@ -414,6 +418,39 @@ mod tests {
                 "switch_session(dev)",
             ]
         );
+    }
+
+    #[test]
+    fn row_panes_split_off_the_previous_pane_to_keep_order() {
+        // tmux places a new pane directly right of its split target, so each
+        // pane must split off the one before it, not the row's first pane.
+        let mock = MockTmux::default();
+        run_workspace(
+            r#"
+                name = "o"
+                [[window]]
+                [[window.row]]
+                [[window.row.pane]]
+                width = 25
+                [[window.row.pane]]
+                width = 25
+                [[window.row.pane]]
+            "#,
+            &mock,
+        );
+
+        let calls = mock.calls();
+        let splits: Vec<_> = calls
+            .iter()
+            .filter(|c| c.starts_with("split_horizontal"))
+            .collect();
+        assert_eq!(
+            splits,
+            ["split_horizontal(%0->%p1)", "split_horizontal(%p1->%p2)"]
+        );
+        // Widths apply left to right, so the last pane absorbs the remainder.
+        assert!(mock.called("resize_pane_width(%0,25)"));
+        assert!(mock.called("resize_pane_width(%p1,25)"));
     }
 
     #[test]

@@ -238,7 +238,14 @@ fn write_atomically(path: &Path, contents: &str) -> Result<()> {
     use std::io::Write as _;
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = path.parent().unwrap_or(Path::new("."));
+    // Workspace paths always live in the workspaces directory; a path
+    // without one means something upstream is wrong, so don't guess.
+    let dir = path.parent().ok_or_else(|| {
+        TsmError::InvalidArgument(format!(
+            "can't save workspace to '{}': no parent directory",
+            path.display()
+        ))
+    })?;
     let mut tmp = NamedTempFile::new_in(dir)?;
     tmp.write_all(contents.as_bytes())?;
 

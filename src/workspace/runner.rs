@@ -143,8 +143,14 @@ impl<'a> WorkspaceRunner<'a> {
                 .client
                 .split_vertical(&last_pane_id, Some(path), &leaf.env)?;
             pane_ids.push(new_pane_id);
-            // Re-tile after every split so the next one has room, however
-            // many panes the window has.
+            // Re-tile after every split. Each split halves the newest pane, so
+            // without this tmux runs out of room fast: on an 80x24 window the
+            // 5th split fails with "no space for new pane". Creating every
+            // pane first and applying the real layout once isn't possible for
+            // that reason. Tiling only reshapes panes and never reorders them,
+            // so pane order stays creation order. The cost is one extra tmux
+            // call per pane (about 430 ms for 10 panes in total), and the
+            // session is still detached here, so nothing flickers on screen.
             self.client.select_layout(&pane_ids[0], "tiled")?;
         }
 

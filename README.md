@@ -188,7 +188,7 @@ command = "lazygit"
 
 A pane that holds rows is only a container: put `command` and `focus` on the panes inside it. Its `env` applies to every pane inside.
 
-**Saving a running session:** `tsm workspace save` writes the current session out as a workspace and opens it in your editor. Window names, the layout (nested as above where needed), pane widths, focus and the root come along. Running commands are written commented out, so nothing re-runs until you uncomment it. Row heights are left out on purpose, and evenly split rows get no widths.
+**Saving a running session:** `tsm workspace save` writes the current session out as a workspace and opens it in the editor. Window names, the layout (nested as above where needed), pane widths, focus and the root come along. Running commands are written commented out, so nothing re-runs until you uncomment it. Full command lines (`nvim .`, not just `nvim`) come from `ps -o stat=,args= -t <tty>`. If your `ps` doesn't support that, only the program name is saved. Row heights are left out on purpose, and evenly split rows get no widths.
 
 **Workspace config location priority:**
 

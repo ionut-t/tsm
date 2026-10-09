@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use tempfile::NamedTempFile;
 
 use crate::cli::utils::shell_quote;
 use crate::error::{Result, TsmError};
@@ -186,7 +188,7 @@ impl WorkspaceCommand {
         let capture = capture::render(&name, &snapshot, home.as_deref().and_then(|h| h.to_str()));
 
         std::fs::create_dir_all(&dir)?;
-        std::fs::write(&path, capture.toml)?;
+        write_atomically(&path, &capture.toml)?;
         println!(
             "Saved session '{}' as workspace at {}",
             session,
@@ -226,6 +228,30 @@ impl WorkspaceCommand {
 
         runner.run()
     }
+}
+
+/// Write `contents` to `path` via a temp file in the same directory and an
+/// atomic rename, so an interrupted save (killed process, full disk) leaves
+/// any existing workspace untouched instead of truncated. The temp file must
+/// share the target's directory so the rename stays on one filesystem.
+fn write_atomically(path: &Path, contents: &str) -> Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = path.parent().unwrap_or(Path::new("."));
+    let mut tmp = NamedTempFile::new_in(dir)?;
+    tmp.write_all(contents.as_bytes())?;
+
+    // Temp files are created owner-only (0600). Keep the permissions of the
+    // file being replaced, or use the usual 0644 for a new one.
+    let permissions = match std::fs::metadata(path) {
+        Ok(existing) => existing.permissions(),
+        Err(_) => std::fs::Permissions::from_mode(0o644),
+    };
+    tmp.as_file().set_permissions(permissions)?;
+    tmp.as_file().sync_all()?;
+    tmp.persist(path).map_err(|e| TsmError::Io(e.error))?;
+    Ok(())
 }
 
 fn pick_workspace(prompt: &str, picker: &dyn Picker) -> Result<Option<String>> {
@@ -532,6 +558,40 @@ mod tests {
                 .run(&mock, &MockPicker::cancelling())
                 .unwrap();
             assert_eq!(Workspace::load("proj").unwrap().name, "proj");
+        });
+    }
+
+    #[test]
+    fn save_replaces_files_atomically_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mock = mock_with_session("proj");
+        with_config_dir(|ws_dir| {
+            std::fs::create_dir_all(ws_dir).unwrap();
+            let path = ws_dir.join("proj.toml");
+            std::fs::write(&path, r#"name = "old""#).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+
+            save(None, None, true)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+
+            // Only the workspace is left: the temp file was renamed into place.
+            let files: Vec<_> = std::fs::read_dir(ws_dir).unwrap().collect();
+            assert_eq!(files.len(), 1);
+            assert_eq!(Workspace::load("proj").unwrap().name, "proj");
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o640);
+
+            // A brand-new workspace gets the usual 0644, not the temp file's 0600.
+            save(Some("fresh"), None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+            let mode = std::fs::metadata(ws_dir.join("fresh.toml"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o644);
         });
     }
 

@@ -87,6 +87,7 @@ examples = [
   { info = "Pick and launch a workspace", cmd = "tsm workspace" },
   { info = "Launch a specific workspace", cmd = "tsm workspace myproject" },
   { info = "Create a new workspace", cmd = "tsm workspace new myproject" },
+  { info = "Save the current session as a workspace", cmd = "tsm workspace save" },
 ]
 
 [[tsm]]

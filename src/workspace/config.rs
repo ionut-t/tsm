@@ -41,6 +41,11 @@ pub struct Pane {
     pub focus: bool,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// Splits this pane into rows of its own. A pane with rows is only a
+    /// container: it can't run a command or take focus, but its env applies
+    /// to every pane inside it.
+    #[serde(default)]
+    pub row: Vec<Row>,
 }
 
 impl Workspace {

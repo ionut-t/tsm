@@ -78,6 +78,8 @@ tsm workspace myproject             # Launch specific workspace
 tsm workspace -n custom-name        # Override session name
 tsm workspace -p ~/other/path       # Override root directory
 tsm workspace new myproject         # Create new workspace (opens editor)
+tsm workspace save                  # Save current session as a workspace (opens editor)
+tsm workspace save myproject -s dev # Save session "dev" as workspace "myproject"
 tsm workspace edit myproject        # Edit existing workspace
 tsm workspace list                  # List all workspaces
 tsm workspace delete myproject      # Delete workspace
@@ -157,6 +159,36 @@ command = "lazygit"
 This creates a session with two windows: one for coding, one split into rows for running servers. Yes, you could just type these commands manually. But where's the fun in that?
 
 Environment variables cascade down and can be overridden at each level: session `[env]` applies everywhere, window `[window.env]` applies to that window's panes, and `[window.row.pane.env]` applies to a single pane.
+
+**Sizes:** `height` on a row and `width` on a pane are percentages of the space that contains them. Rows and panes without a size share what's left evenly.
+
+**Panes inside panes:** a pane can hold rows of its own, so any layout tmux can make can be described. One tall pane on the left, with the right half split into a top pane and two bottom panes:
+
+```toml
+[[window]]
+name = "dev"
+
+[[window.row]]
+
+[[window.row.pane]]            # left, full height
+command = "nvim ."
+
+[[window.row.pane]]            # right half, split into rows
+
+[[window.row.pane.row]]
+[[window.row.pane.row.pane]]   # top right
+command = "cargo watch -x check"
+
+[[window.row.pane.row]]
+[[window.row.pane.row.pane]]   # bottom right, left side
+command = "npm run dev"
+[[window.row.pane.row.pane]]   # bottom right, right side
+command = "lazygit"
+```
+
+A pane that holds rows is only a container: put `command` and `focus` on the panes inside it. Its `env` applies to every pane inside.
+
+**Saving a running session:** `tsm workspace save` writes the current session out as a workspace and opens it in your editor. Window names, the layout (nested as above where needed), pane widths, focus and the root come along. Running commands are written commented out, so nothing re-runs until you uncomment it. Row heights are left out on purpose, and evenly split rows get no widths.
 
 **Workspace config location priority:**
 

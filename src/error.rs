@@ -39,6 +39,9 @@ pub enum TsmError {
 
     #[error("Workspace '{0}' already exists")]
     WorkspaceAlreadyExists(String),
+
+    #[error("invalid tmux layout: {0}")]
+    LayoutParse(String),
 }
 
 pub type Result<T> = std::result::Result<T, TsmError>;
@@ -82,6 +85,10 @@ mod tests {
         assert_eq!(
             TsmError::WorkspaceAlreadyExists("dev".into()).to_string(),
             "Workspace 'dev' already exists"
+        );
+        assert_eq!(
+            TsmError::LayoutParse("bad".into()).to_string(),
+            "invalid tmux layout: bad"
         );
     }
 

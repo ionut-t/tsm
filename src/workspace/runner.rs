@@ -1,10 +1,11 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
     error::{Result, TsmError},
     tmux::Tmux,
-    workspace::config::{Pane, Workspace},
+    workspace::arrange::{self, Leaf},
+    workspace::config::{Window, Workspace},
+    workspace::layout,
 };
 
 pub struct WorkspaceRunner<'a> {
@@ -41,6 +42,12 @@ impl<'a> WorkspaceRunner<'a> {
 
         let windows = &self.workspace.window;
 
+        // Check the config before creating anything, so a mistake doesn't
+        // leave a half-built session behind.
+        for window in windows {
+            arrange::validate(window)?;
+        }
+
         // Create the session with only the workspace-level env. `new-session -e`
         // sets the *session* environment, so it both seeds the first pane and is
         // inherited by any window/pane spawned later (including ones the user
@@ -59,12 +66,11 @@ impl<'a> WorkspaceRunner<'a> {
         for (i, window) in windows.iter().enumerate() {
             let window_index: usize;
 
-            // Effective env for this window's panes: workspace env overlaid with
-            // window-level overrides. Pane-level overrides are merged on top per
-            // pane when each pane is spawned.
-            let window_env = merge_env(&self.workspace.env, &window.env);
-            let first_pane_env =
-                pane_env(&window_env, window.row.first().and_then(|r| r.pane.first()));
+            // Every pane tmux will create for this window, in layout order,
+            // each with its effective env (workspace, window, enclosing panes,
+            // then its own).
+            let leaves = arrange::leaves(window, &self.workspace.env);
+            let first_pane_env = &leaves[0].env;
 
             if i == 0 {
                 window_index = self.client.get_current_window_index(&self.session_name)?;
@@ -76,7 +82,7 @@ impl<'a> WorkspaceRunner<'a> {
                     &self.session_name,
                     window.name.as_deref(),
                     Some(&path),
-                    &first_pane_env,
+                    first_pane_env,
                 )?;
             }
 
@@ -96,41 +102,12 @@ impl<'a> WorkspaceRunner<'a> {
             // only the workspace env. If this window or its first pane add any
             // overrides, respawn that idle shell with the full effective env so
             // it matches the others — without polluting the session environment.
-            if i == 0 && first_pane_env != self.workspace.env {
+            if i == 0 && *first_pane_env != self.workspace.env {
                 self.client
-                    .respawn_pane(&first_pane, &path, &first_pane_env)?;
+                    .respawn_pane(&first_pane, &path, first_pane_env)?;
             }
 
-            let mut row_first_panes: Vec<String> = vec![first_pane];
-
-            for row_idx in 1..window.row.len() {
-                // Split from the previous row's first pane to create the next row below
-                let split_from = &row_first_panes[row_idx - 1];
-                let row_pane_env = pane_env(&window_env, window.row[row_idx].pane.first());
-                let new_row_pane =
-                    self.client
-                        .split_vertical(split_from, Some(&path), None, &row_pane_env)?;
-                row_first_panes.push(new_row_pane);
-            }
-
-            // Resize rows that have a specified height
-            for (row_idx, row) in window.row.iter().enumerate() {
-                if let Some(height) = row.height {
-                    self.client
-                        .resize_pane_height(&row_first_panes[row_idx], height)?;
-                }
-            }
-
-            // Split each row horizontally for its panes
-            for (row_idx, row) in window.row.iter().enumerate() {
-                self.create_row_panes(
-                    &row_first_panes[row_idx],
-                    &row.pane,
-                    &path,
-                    &window_env,
-                    &mut focus_pane,
-                )?;
-            }
+            self.create_panes(window, &leaves, first_pane, &path, &mut focus_pane)?;
         }
 
         if let Some(window_idx) = focus_window {
@@ -144,55 +121,47 @@ impl<'a> WorkspaceRunner<'a> {
         self.attach_or_switch()
     }
 
-    /// Create panes within a row by splitting horizontally
-    fn create_row_panes(
+    /// Create the rest of a window's panes, arrange them, then start their
+    /// commands.
+    ///
+    /// tmux fills a layout with the window's panes in pane order, and each
+    /// split here goes off the newest pane, so pane order is creation order:
+    /// the same order as `leaves`.
+    fn create_panes(
         &self,
-        first_pane_id: &str,
-        panes: &[Pane],
+        window: &Window,
+        leaves: &[Leaf],
+        first_pane_id: String,
         path: &Path,
-        window_env: &HashMap<String, String>,
         focus_pane: &mut Option<String>,
     ) -> Result<()> {
-        if panes.is_empty() {
-            return Ok(());
-        }
+        let mut pane_ids = vec![first_pane_id];
 
-        let mut pane_ids = vec![first_pane_id.to_string()];
-
-        // The row's first pane already exists with its env applied at creation.
-        // Spawn the rest, each with its own effective env via tmux's -e flag.
-        // Split off the most recent pane: tmux places the new pane directly
-        // right of its target, so splitting the first pane each time would
-        // reverse the order of every pane after it.
-        for pane in panes.iter().skip(1) {
+        for leaf in leaves.iter().skip(1) {
             let last_pane_id = pane_ids.last().expect("pane_ids starts non-empty").clone();
-            let new_pane_id = self.client.split_horizontal(
-                &last_pane_id,
-                Some(path),
-                None,
-                &pane_env(window_env, Some(pane)),
-            )?;
+            let new_pane_id = self
+                .client
+                .split_vertical(&last_pane_id, Some(path), &leaf.env)?;
             pane_ids.push(new_pane_id);
+            // Re-tile after every split so the next one has room, however
+            // many panes the window has.
+            self.client.select_layout(&pane_ids[0], "tiled")?;
         }
 
-        // Resize panes that have a specified width
-        for (pane_idx, pane) in panes.iter().enumerate() {
-            if let Some(width) = pane.width
-                && let Some(pane_id) = pane_ids.get(pane_idx)
-            {
-                self.client.resize_pane_width(pane_id, width)?;
+        if leaves.len() > 1 {
+            let (width, height) = self.client.window_size(&pane_ids[0])?;
+            let layout = layout::render(&arrange::layout(window, width, height)?);
+            self.client.select_layout(&pane_ids[0], &layout)?;
+        }
+
+        // Env is already set on each pane via -e.
+        for (leaf, pane_id) in leaves.iter().zip(&pane_ids) {
+            let Some(pane) = leaf.pane else { continue };
+            if let Some(cmd) = &pane.command {
+                self.client.send_keys(pane_id, cmd)?;
             }
-        }
-
-        // Send commands and track focus. Env is already set on each pane via -e.
-        for (pane_idx, pane) in panes.iter().enumerate() {
-            if let Some(pane_id) = pane_ids.get(pane_idx) {
-                if let Some(cmd) = &pane.command {
-                    self.client.send_keys(pane_id, cmd)?;
-                }
-                if pane.focus {
-                    *focus_pane = Some(pane_id.clone());
-                }
+            if pane.focus {
+                *focus_pane = Some(pane_id.clone());
             }
         }
 
@@ -205,25 +174,6 @@ impl<'a> WorkspaceRunner<'a> {
         } else {
             self.client.attach_session(&self.session_name)
         }
-    }
-}
-
-fn merge_env(
-    base: &HashMap<String, String>,
-    overrides: &HashMap<String, String>,
-) -> HashMap<String, String> {
-    let mut merged = base.clone();
-    merged.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
-    merged
-}
-
-/// Effective env for a single pane: the window-level env with the pane's own
-/// overrides layered on top. Skips the merge (but still clones) when the pane
-/// defines no env of its own.
-fn pane_env(window_env: &HashMap<String, String>, pane: Option<&Pane>) -> HashMap<String, String> {
-    match pane {
-        Some(pane) if !pane.env.is_empty() => merge_env(window_env, &pane.env),
-        _ => window_env.clone(),
     }
 }
 
@@ -240,70 +190,6 @@ fn expand_tilde(path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workspace::config::Pane;
-
-    fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
-    }
-
-    #[test]
-    fn merge_env_overlays_overrides_onto_base() {
-        let base = map(&[("A", "1"), ("B", "2")]);
-        let overrides = map(&[("B", "20"), ("C", "3")]);
-        let merged = merge_env(&base, &overrides);
-
-        assert_eq!(merged.get("A").map(String::as_str), Some("1"));
-        assert_eq!(
-            merged.get("B").map(String::as_str),
-            Some("20"),
-            "override wins"
-        );
-        assert_eq!(merged.get("C").map(String::as_str), Some("3"));
-        assert_eq!(merged.len(), 3);
-    }
-
-    #[test]
-    fn merge_env_does_not_mutate_base() {
-        let base = map(&[("A", "1")]);
-        let _ = merge_env(&base, &map(&[("A", "2")]));
-        assert_eq!(base.get("A").map(String::as_str), Some("1"));
-    }
-
-    fn pane_with_env(pairs: &[(&str, &str)]) -> Pane {
-        Pane {
-            command: None,
-            width: None,
-            focus: false,
-            env: map(pairs),
-        }
-    }
-
-    #[test]
-    fn pane_env_without_pane_clones_window_env() {
-        let window_env = map(&[("A", "1")]);
-        assert_eq!(pane_env(&window_env, None), window_env);
-    }
-
-    #[test]
-    fn pane_env_with_empty_pane_env_clones_window_env() {
-        let window_env = map(&[("A", "1")]);
-        let pane = pane_with_env(&[]);
-        assert_eq!(pane_env(&window_env, Some(&pane)), window_env);
-    }
-
-    #[test]
-    fn pane_env_overlays_pane_overrides() {
-        let window_env = map(&[("A", "1"), ("B", "2")]);
-        let pane = pane_with_env(&[("B", "22"), ("C", "3")]);
-        let merged = pane_env(&window_env, Some(&pane));
-
-        assert_eq!(merged.get("A").map(String::as_str), Some("1"));
-        assert_eq!(merged.get("B").map(String::as_str), Some("22"));
-        assert_eq!(merged.get("C").map(String::as_str), Some("3"));
-    }
 
     #[test]
     fn expand_tilde_expands_leading_tilde() {
@@ -376,11 +262,10 @@ mod tests {
     }
 
     #[test]
-    fn builds_full_window_layout_in_order() {
-        // One window, two rows; the first row has two panes, the second row a
-        // single pane with a fixed height. Verifies the exact tmux call
-        // sequence and — via the mock's distinct split ids — which pane each
-        // operation targets.
+    fn builds_window_from_a_generated_layout() {
+        // Two rows: two panes side by side, then one pane with a fixed
+        // height. Every pane is created first, then one layout sized for the
+        // window (120x40 in the mock) arranges them.
         let mock = MockTmux::default();
         run_workspace(
             r#"
@@ -405,52 +290,107 @@ mod tests {
             vec![
                 "create_session_detached(dev)",
                 "rename_window(dev,main)",
-                // Row 2 is split off row 1's first pane (%0), yielding %p1.
+                // Each split goes off the newest pane, re-tiling for room.
                 "split_vertical(%0->%p1)",
-                // The fixed-height row is resized by its first pane (%p1).
-                "resize_pane_height(%p1,40)",
-                // Row 1's second pane splits horizontally off %0, yielding %p2.
-                "split_horizontal(%0->%p2)",
-                // Commands land in their panes: a→%0, b→%p2 (row 1), c→%p1 (row 2).
+                "select_layout(%0,tiled)",
+                "split_vertical(%p1->%p2)",
+                "select_layout(%0,tiled)",
+                "window_size(%0)",
+                // Row 1 gets what row 2's 40% leaves; its panes split evenly.
+                "select_layout(%0,116b,120x40,0,0[120x23,0,0{60x23,0,0,0,59x23,61,0,1},120x16,0,24,2])",
+                // Commands follow creation order, which is layout order.
                 "send_keys(%0,a)",
-                "send_keys(%p2,b)",
-                "send_keys(%p1,c)",
+                "send_keys(%p1,b)",
+                "send_keys(%p2,c)",
                 "switch_session(dev)",
             ]
         );
     }
 
     #[test]
-    fn row_panes_split_off_the_previous_pane_to_keep_order() {
-        // tmux places a new pane directly right of its split target, so each
-        // pane must split off the one before it, not the row's first pane.
+    fn panes_can_hold_rows_of_their_own() {
+        // One tall pane on the left; the right half split into a top pane
+        // and two bottom panes.
         let mock = MockTmux::default();
         run_workspace(
             r#"
-                name = "o"
+                name = "n"
                 [[window]]
                 [[window.row]]
                 [[window.row.pane]]
-                width = 25
+                command = "1"
                 [[window.row.pane]]
-                width = 25
-                [[window.row.pane]]
+                [[window.row.pane.row]]
+                [[window.row.pane.row.pane]]
+                command = "2"
+                [[window.row.pane.row]]
+                [[window.row.pane.row.pane]]
+                command = "3"
+                [[window.row.pane.row.pane]]
+                command = "4"
+                focus = true
             "#,
             &mock,
         );
 
-        let calls = mock.calls();
-        let splits: Vec<_> = calls
-            .iter()
-            .filter(|c| c.starts_with("split_horizontal"))
+        assert!(mock.called(
+            "select_layout(%0,d099,120x40,0,0{60x40,0,0,0,59x40,61,0[59x20,61,0,1,59x19,61,21{29x19,61,21,2,29x19,91,21,3}]})"
+        ));
+        let sends: Vec<_> = mock
+            .calls()
+            .into_iter()
+            .filter(|c| c.starts_with("send_keys") || c.starts_with("select_pane"))
             .collect();
         assert_eq!(
-            splits,
-            ["split_horizontal(%0->%p1)", "split_horizontal(%p1->%p2)"]
+            sends,
+            [
+                "send_keys(%0,1)",
+                "send_keys(%p1,2)",
+                "send_keys(%p2,3)",
+                "send_keys(%p3,4)",
+                "select_pane(%p3)",
+            ]
         );
-        // Widths apply left to right, so the last pane absorbs the remainder.
-        assert!(mock.called("resize_pane_width(%0,25)"));
-        assert!(mock.called("resize_pane_width(%p1,25)"));
+    }
+
+    #[test]
+    fn single_pane_windows_skip_the_layout() {
+        let mock = MockTmux::default();
+        run_workspace(
+            r#"
+                name = "s"
+                [[window]]
+                [[window.row]]
+                [[window.row.pane]]
+                command = "a"
+            "#,
+            &mock,
+        );
+        assert!(!mock.called("select_layout"));
+        assert!(!mock.called("window_size"));
+        assert!(mock.called("send_keys(%0,a)"));
+    }
+
+    #[test]
+    fn invalid_config_fails_before_creating_anything() {
+        let mock = MockTmux::default();
+        let ws: Workspace = toml::from_str(
+            r#"
+                name = "bad"
+                [[window]]
+                [[window.row]]
+                [[window.row.pane]]
+                command = "can't run in a container"
+                [[window.row.pane.row]]
+            "#,
+        )
+        .unwrap();
+
+        let err = WorkspaceRunner::new(&mock, ws, None, Some(PathBuf::from("/tmp")))
+            .run()
+            .unwrap_err();
+        assert!(matches!(err, TsmError::InvalidArgument(_)));
+        assert!(mock.calls().is_empty());
     }
 
     #[test]
@@ -534,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn applies_pane_width_resizes() {
+    fn pane_widths_size_the_layout() {
         let mock = MockTmux::default();
         run_workspace(
             r#"
@@ -547,7 +487,7 @@ mod tests {
             "#,
             &mock,
         );
-        // The first pane of the row has a width, resized by its id (%0).
-        assert!(mock.called("resize_pane_width(%0,70)"));
+        // 70% of the 120-column window; the other pane gets the rest.
+        assert!(mock.called("select_layout(%0,2a7e,120x40,0,0{84x40,0,0,0,35x40,85,0,1})"));
     }
 }

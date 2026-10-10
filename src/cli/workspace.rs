@@ -1,9 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use tempfile::NamedTempFile;
 
 use crate::cli::utils::shell_quote;
 use crate::error::{Result, TsmError};
 use crate::fzf::{Picker, PickerOptions};
 use crate::tmux::Tmux;
+use crate::workspace::capture;
 use crate::workspace::config::Workspace;
 use crate::workspace::paths::workspaces_dir;
 use crate::workspace::runner::WorkspaceRunner;
@@ -34,6 +37,19 @@ enum WorkspaceSubcommand {
     Edit { name: Option<String> },
     /// Create new workspace
     New { name: String },
+    /// Save a running session as a new workspace
+    Save {
+        /// Workspace name (defaults to the session name)
+        name: Option<String>,
+
+        /// Session to save (defaults to the current session)
+        #[arg(short, long)]
+        session: Option<String>,
+
+        /// Overwrite an existing workspace
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Delete workspace
     Delete { name: Option<String> },
     /// Show workspaces directory path
@@ -46,6 +62,11 @@ impl WorkspaceCommand {
             Some(WorkspaceSubcommand::List) => self.list_workspaces(),
             Some(WorkspaceSubcommand::Edit { name }) => self.edit_workspace(name, picker),
             Some(WorkspaceSubcommand::New { name }) => self.create_workspace(name, picker),
+            Some(WorkspaceSubcommand::Save {
+                name,
+                session,
+                force,
+            }) => self.save_workspace(name, session, *force, client, picker),
             Some(WorkspaceSubcommand::Path) => self.show_path(),
             Some(WorkspaceSubcommand::Delete { name }) => self.delete_workspace(name, picker),
             None => self.launch_workspace(client, picker),
@@ -133,6 +154,54 @@ impl WorkspaceCommand {
         self.edit_workspace(&Some(name.to_string()), picker)
     }
 
+    fn save_workspace(
+        &self,
+        name: &Option<String>,
+        session: &Option<String>,
+        force: bool,
+        client: &dyn Tmux,
+        picker: &dyn Picker,
+    ) -> Result<()> {
+        let session = match session {
+            Some(s) => s.clone(),
+            None if client.is_inside_tmux() => client.current_session()?,
+            None => return Err(TsmError::NotInTmux),
+        };
+        let name = name.clone().unwrap_or_else(|| session.clone());
+
+        // tmux allows `/` in session names, but it can't be part of a file name.
+        if name.is_empty() || name.contains('/') {
+            return Err(TsmError::InvalidArgument(format!(
+                "invalid workspace name '{name}': pass a name without '/'"
+            )));
+        }
+
+        let dir = workspaces_dir();
+        let path = dir.join(format!("{}.toml", name));
+
+        if path.exists() && !force {
+            return Err(TsmError::WorkspaceAlreadyExists(name));
+        }
+
+        let snapshot = client.snapshot_session(&session)?;
+        let home = dirs::home_dir();
+        let capture = capture::render(&name, &snapshot, home.as_deref().and_then(|h| h.to_str()));
+
+        std::fs::create_dir_all(&dir)?;
+        write_atomically(&path, &capture.toml)?;
+        println!(
+            "Saved session '{}' as workspace at {}",
+            session,
+            path.display()
+        );
+        for warning in capture.warnings {
+            eprintln!("warning: {warning}");
+        }
+
+        // Open in editor
+        self.edit_workspace(&Some(name), picker)
+    }
+
     fn show_path(&self) -> Result<()> {
         println!("{}", workspaces_dir().display());
         Ok(())
@@ -161,6 +230,37 @@ impl WorkspaceCommand {
     }
 }
 
+/// Write `contents` to `path` via a temp file in the same directory and an
+/// atomic rename, so an interrupted save (killed process, full disk) leaves
+/// any existing workspace untouched instead of truncated. The temp file must
+/// share the target's directory so the rename stays on one filesystem.
+fn write_atomically(path: &Path, contents: &str) -> Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::PermissionsExt;
+
+    // Workspace paths always live in the workspaces directory; a path
+    // without one means something upstream is wrong, so don't guess.
+    let dir = path.parent().ok_or_else(|| {
+        TsmError::InvalidArgument(format!(
+            "can't save workspace to '{}': no parent directory",
+            path.display()
+        ))
+    })?;
+    let mut tmp = NamedTempFile::new_in(dir)?;
+    tmp.write_all(contents.as_bytes())?;
+
+    // Temp files are created owner-only (0600). Keep the permissions of the
+    // file being replaced, or use the usual 0644 for a new one.
+    let permissions = match std::fs::metadata(path) {
+        Ok(existing) => existing.permissions(),
+        Err(_) => std::fs::Permissions::from_mode(0o644),
+    };
+    tmp.as_file().set_permissions(permissions)?;
+    tmp.as_file().sync_all()?;
+    tmp.persist(path).map_err(|e| TsmError::Io(e.error))?;
+    Ok(())
+}
+
 fn pick_workspace(prompt: &str, picker: &dyn Picker) -> Result<Option<String>> {
     let workspaces = Workspace::list()?;
     if workspaces.is_empty() {
@@ -182,6 +282,7 @@ fn pick_workspace(prompt: &str, picker: &dyn Picker) -> Result<Option<String>> {
 mod tests {
     use super::*;
     use crate::test_support::{MockPicker, MockTmux, with_env};
+    use crate::tmux::SessionSnapshot;
     use tempfile::TempDir;
 
     fn command(subcommand: WorkspaceSubcommand) -> WorkspaceCommand {
@@ -378,6 +479,167 @@ mod tests {
                 .run(&mock, &MockPicker::returning("only"))
                 .unwrap();
             assert!(ws_dir.join("only.toml").exists());
+        });
+    }
+
+    fn save(name: Option<&str>, session: Option<&str>, force: bool) -> WorkspaceCommand {
+        command(WorkspaceSubcommand::Save {
+            name: name.map(str::to_string),
+            session: session.map(str::to_string),
+            force,
+        })
+    }
+
+    fn mock_with_session(session: &str) -> MockTmux {
+        use crate::tmux::snapshot::{PaneSnapshot, WindowSnapshot};
+
+        let mut mock = MockTmux::default();
+        mock.current_session = session.to_string();
+        mock.snapshot = Some(SessionSnapshot {
+            name: session.to_string(),
+            path: "/tmp".to_string(),
+            windows: vec![WindowSnapshot {
+                index: 0,
+                name: Some("code".to_string()),
+                active: true,
+                layout: "55af,120x40,0,0,0".to_string(),
+                panes: vec![PaneSnapshot {
+                    id: "%0".to_string(),
+                    active: true,
+                    current_command: "zsh".to_string(),
+                    foreground_args: None,
+                    path: "/tmp".to_string(),
+                    tty: "/dev/ttys0".to_string(),
+                }],
+            }],
+        });
+        mock
+    }
+
+    #[test]
+    fn save_writes_the_current_session_under_its_name() {
+        let mock = mock_with_session("proj");
+        with_config_dir(|ws_dir| {
+            save(None, None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+
+            assert!(mock.called("snapshot_session(proj)"));
+            let ws = Workspace::load("proj").unwrap();
+            assert_eq!(ws.name, "proj");
+            assert_eq!(ws.window[0].name.as_deref(), Some("code"));
+            assert!(ws_dir.join("proj.toml").exists());
+        });
+    }
+
+    #[test]
+    fn save_uses_the_given_name_and_session() {
+        let mock = mock_with_session("other");
+        with_config_dir(|_| {
+            save(Some("renamed"), Some("other"), false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+
+            assert!(mock.called("snapshot_session(other)"));
+            assert!(!mock.called("current_session"));
+            assert_eq!(Workspace::load("renamed").unwrap().name, "renamed");
+        });
+    }
+
+    #[test]
+    fn save_refuses_to_overwrite_without_force() {
+        let mock = mock_with_session("proj");
+        with_config_dir(|ws_dir| {
+            std::fs::create_dir_all(ws_dir).unwrap();
+            let path = ws_dir.join("proj.toml");
+            std::fs::write(&path, r#"name = "keep""#).unwrap();
+
+            let err = save(None, None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap_err();
+            assert!(matches!(err, TsmError::WorkspaceAlreadyExists(n) if n == "proj"));
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"name = "keep""#);
+            assert!(!mock.called("snapshot_session"));
+
+            save(None, None, true)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+            assert_eq!(Workspace::load("proj").unwrap().name, "proj");
+        });
+    }
+
+    #[test]
+    fn save_replaces_files_atomically_and_keeps_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mock = mock_with_session("proj");
+        with_config_dir(|ws_dir| {
+            std::fs::create_dir_all(ws_dir).unwrap();
+            let path = ws_dir.join("proj.toml");
+            std::fs::write(&path, r#"name = "old""#).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+
+            save(None, None, true)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+
+            // Only the workspace is left: the temp file was renamed into place.
+            let files: Vec<_> = std::fs::read_dir(ws_dir).unwrap().collect();
+            assert_eq!(files.len(), 1);
+            assert_eq!(Workspace::load("proj").unwrap().name, "proj");
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o640);
+
+            // A brand-new workspace gets the usual 0644, not the temp file's 0600.
+            save(Some("fresh"), None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+            let mode = std::fs::metadata(ws_dir.join("fresh.toml"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o644);
+        });
+    }
+
+    #[test]
+    fn save_needs_a_session_outside_tmux() {
+        let mut mock = mock_with_session("proj");
+        mock.inside_tmux = false;
+        with_config_dir(|_| {
+            let err = save(None, None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap_err();
+            assert!(matches!(err, TsmError::NotInTmux));
+
+            // Naming the session works from anywhere.
+            save(None, Some("proj"), false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn save_rejects_names_that_are_not_file_names() {
+        let mock = mock_with_session("a/b");
+        with_config_dir(|_| {
+            let err = save(None, None, false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap_err();
+            assert!(matches!(err, TsmError::InvalidArgument(_)));
+        });
+    }
+
+    #[test]
+    fn save_reports_a_missing_session_without_writing() {
+        let mut mock = MockTmux::default();
+        mock.snapshot = None;
+        with_config_dir(|ws_dir| {
+            let err = save(Some("ghost"), Some("ghost"), false)
+                .run(&mock, &MockPicker::cancelling())
+                .unwrap_err();
+            assert!(matches!(err, TsmError::TmuxCommand(_)));
+            assert!(!ws_dir.join("ghost.toml").exists());
         });
     }
 

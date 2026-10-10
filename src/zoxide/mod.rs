@@ -38,7 +38,7 @@ impl DirectorySource for Zoxide {
 
 /// Replace a leading home-directory prefix with `~` for display, matching the
 /// convention zoxide paths are shown in the picker.
-fn abbreviate_home(line: &str, home: Option<&str>) -> String {
+pub(crate) fn abbreviate_home(line: &str, home: Option<&str>) -> String {
     if let Some(home) = home
         && !home.is_empty()
         && line.starts_with(home)

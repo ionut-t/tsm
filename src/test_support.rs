@@ -58,7 +58,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::error::{Result, TsmError};
 use crate::fzf::{Picker, PickerOptions};
 use crate::history::HistoryStore;
-use crate::tmux::{KeyBinding, Tmux, Window};
+use crate::tmux::{KeyBinding, SessionSnapshot, Tmux, Window};
 use crate::zoxide::DirectorySource;
 
 /// In-memory [`HistoryStore`] double.
@@ -218,6 +218,10 @@ pub struct MockTmux {
     pub key_bindings: Vec<KeyBinding>,
     /// Returned by `default_key_bindings` (tmux's built-ins).
     pub default_key_bindings: Vec<KeyBinding>,
+    /// Returned by `window_size`.
+    pub window_size: (u32, u32),
+    /// Returned by `snapshot_session`; `None` models "session not found".
+    pub snapshot: Option<SessionSnapshot>,
     calls: RefCell<Vec<String>>,
     /// Monotonic counter so each split returns a distinct pane id (`%p1`, …),
     /// letting layout tests verify which pane subsequent operations target.
@@ -239,6 +243,8 @@ impl Default for MockTmux {
             prefix: Some("C-b".to_string()),
             key_bindings: Vec::new(),
             default_key_bindings: Vec::new(),
+            window_size: (120, 40),
+            snapshot: None,
             calls: RefCell::new(Vec::new()),
             next_split: Cell::new(1),
         }
@@ -289,38 +295,15 @@ impl Tmux for MockTmux {
         Ok(())
     }
 
-    fn split_horizontal(
-        &self,
-        target_pane: &str,
-        _path: Option<&std::path::Path>,
-        _percentage: Option<u32>,
-        _env: &HashMap<String, String>,
-    ) -> Result<String> {
-        let id = self.next_pane();
-        self.log(format!("split_horizontal({target_pane}->{id})"));
-        Ok(id)
-    }
-
     fn split_vertical(
         &self,
         target_pane: &str,
         _path: Option<&std::path::Path>,
-        _percentage: Option<u32>,
         _env: &HashMap<String, String>,
     ) -> Result<String> {
         let id = self.next_pane();
         self.log(format!("split_vertical({target_pane}->{id})"));
         Ok(id)
-    }
-
-    fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()> {
-        self.log(format!("resize_pane_height({pane_id},{percentage})"));
-        Ok(())
-    }
-
-    fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()> {
-        self.log(format!("resize_pane_width({pane_id},{percentage})"));
-        Ok(())
     }
 
     fn send_keys(&self, pane_id: &str, command: &str) -> Result<()> {
@@ -330,6 +313,16 @@ impl Tmux for MockTmux {
 
     fn select_pane(&self, pane_id: &str) -> Result<()> {
         self.log(format!("select_pane({pane_id})"));
+        Ok(())
+    }
+
+    fn window_size(&self, pane_id: &str) -> Result<(u32, u32)> {
+        self.log(format!("window_size({pane_id})"));
+        Ok(self.window_size)
+    }
+
+    fn select_layout(&self, pane_id: &str, layout: &str) -> Result<()> {
+        self.log(format!("select_layout({pane_id},{layout})"));
         Ok(())
     }
 
@@ -478,5 +471,12 @@ impl Tmux for MockTmux {
     fn default_key_bindings(&self) -> Result<Vec<KeyBinding>> {
         self.log("default_key_bindings()");
         Ok(self.default_key_bindings.clone())
+    }
+
+    fn snapshot_session(&self, session: &str) -> Result<SessionSnapshot> {
+        self.log(format!("snapshot_session({session})"));
+        self.snapshot
+            .clone()
+            .ok_or_else(|| TsmError::TmuxCommand(format!("can't find session: {session}")))
     }
 }

@@ -1,4 +1,5 @@
-use super::{KeyBinding, Window};
+use super::snapshot;
+use super::{KeyBinding, SessionSnapshot, Window};
 use crate::error::{Result, TsmError};
 use std::collections::HashMap;
 use std::process::Command;
@@ -23,29 +24,23 @@ pub trait Tmux {
 
     fn rename_window(&self, session: &str, new_name: &str) -> Result<()>;
 
-    fn split_horizontal(
-        &self,
-        target_pane: &str,
-        path: Option<&std::path::Path>,
-        percentage: Option<u32>,
-        env: &HashMap<String, String>,
-    ) -> Result<String>;
-
     fn split_vertical(
         &self,
         target_pane: &str,
         path: Option<&std::path::Path>,
-        percentage: Option<u32>,
         env: &HashMap<String, String>,
     ) -> Result<String>;
-
-    fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()>;
-
-    fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()>;
 
     fn send_keys(&self, pane_id: &str, command: &str) -> Result<()>;
 
     fn select_pane(&self, pane_id: &str) -> Result<()>;
+
+    /// Arrange the window containing `pane_id` with `layout`: a preset name
+    /// such as `tiled`, or a saved `#{window_layout}` string.
+    fn select_layout(&self, pane_id: &str, layout: &str) -> Result<()>;
+
+    /// Width and height, in cells, of the window containing `pane_id`.
+    fn window_size(&self, pane_id: &str) -> Result<(u32, u32)>;
 
     fn list_panes(&self, session: &str, window_index: usize) -> Result<Vec<String>>;
 
@@ -125,6 +120,10 @@ pub trait Tmux {
     /// throwaway server started with no config. Diffing against these isolates
     /// the bindings the user's config added or changed.
     fn default_key_bindings(&self) -> Result<Vec<KeyBinding>>;
+
+    /// Describe `session`'s windows and panes, including each pane's
+    /// foreground command line where `ps` can find it.
+    fn snapshot_session(&self, session: &str) -> Result<SessionSnapshot>;
 }
 
 /// Tables covered by the key-binding queries.
@@ -151,51 +150,6 @@ impl TmuxClient {
         vars.sort();
         for (key, value) in vars {
             cmd.arg("-e").arg(format!("{}={}", key, value));
-        }
-    }
-
-    fn split_pane_internal(
-        &self,
-        target_pane: &str,
-        split_flag: &str,
-        path: Option<&std::path::Path>,
-        percentage: Option<u32>,
-        env: &HashMap<String, String>,
-    ) -> Result<String> {
-        let mut cmd = self.tmux_cmd();
-        cmd.arg("split-window")
-            .arg(split_flag)
-            .arg("-t")
-            .arg(target_pane)
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}");
-
-        if let Some(p) = path {
-            cmd.arg("-c").arg(p);
-        }
-
-        if let Some(pct) = percentage {
-            cmd.arg("-p").arg(pct.to_string());
-        }
-
-        Self::add_env_args(&mut cmd, env);
-
-        let output = cmd.output()?;
-
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Some(first_line) = stdout.lines().next() {
-                Ok(first_line.to_string())
-            } else {
-                Err(TsmError::TmuxCommand(
-                    "No pane ID returned from split-window".to_string(),
-                ))
-            }
-        } else {
-            Err(TsmError::TmuxCommand(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ))
         }
     }
 
@@ -354,61 +308,39 @@ impl Tmux for TmuxClient {
         }
     }
 
-    /// Split a pane horizontally (creates panes side by side)
-    fn split_horizontal(
-        &self,
-        target_pane: &str,
-        path: Option<&std::path::Path>,
-        percentage: Option<u32>,
-        env: &HashMap<String, String>,
-    ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-h", path, percentage, env)
-    }
-
     /// Split a pane vertically (creates panes stacked top/bottom)
     fn split_vertical(
         &self,
         target_pane: &str,
         path: Option<&std::path::Path>,
-        percentage: Option<u32>,
         env: &HashMap<String, String>,
     ) -> Result<String> {
-        self.split_pane_internal(target_pane, "-v", path, percentage, env)
-    }
-
-    /// Resize a pane to a percentage of the window height
-    fn resize_pane_height(&self, pane_id: &str, percentage: u32) -> Result<()> {
-        let output = self
-            .tmux_cmd()
-            .arg("resize-pane")
+        let mut cmd = self.tmux_cmd();
+        cmd.arg("split-window")
+            .arg("-v")
             .arg("-t")
-            .arg(pane_id)
-            .arg("-y")
-            .arg(format!("{}%", percentage))
-            .output()?;
+            .arg(target_pane)
+            .arg("-P")
+            .arg("-F")
+            .arg("#{pane_id}");
 
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(TsmError::TmuxCommand(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ))
+        if let Some(p) = path {
+            cmd.arg("-c").arg(p);
         }
-    }
 
-    /// Resize a pane to a percentage of the window width
-    fn resize_pane_width(&self, pane_id: &str, percentage: u32) -> Result<()> {
-        let output = self
-            .tmux_cmd()
-            .arg("resize-pane")
-            .arg("-t")
-            .arg(pane_id)
-            .arg("-x")
-            .arg(format!("{}%", percentage))
-            .output()?;
+        Self::add_env_args(&mut cmd, env);
+
+        let output = cmd.output()?;
 
         if output.status.success() {
-            Ok(())
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(first_line) = stdout.lines().next() {
+                Ok(first_line.to_string())
+            } else {
+                Err(TsmError::TmuxCommand(
+                    "No pane ID returned from split-window".to_string(),
+                ))
+            }
         } else {
             Err(TsmError::TmuxCommand(
                 String::from_utf8_lossy(&output.stderr).to_string(),
@@ -449,6 +381,45 @@ impl Tmux for TmuxClient {
             Err(TsmError::TmuxCommand(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ))
+        }
+    }
+
+    fn select_layout(&self, pane_id: &str, layout: &str) -> Result<()> {
+        let output = self
+            .tmux_cmd()
+            .args(["select-layout", "-t", pane_id, layout])
+            .output()?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn window_size(&self, pane_id: &str) -> Result<(u32, u32)> {
+        let output = self
+            .tmux_cmd()
+            .args(["display-message", "-p", "-t", pane_id])
+            .arg("#{window_width} #{window_height}")
+            .output()?;
+
+        if !output.status.success() {
+            return Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut parts = stdout.split_whitespace().map(str::parse::<u32>);
+        match (parts.next(), parts.next()) {
+            (Some(Ok(width)), Some(Ok(height))) => Ok((width, height)),
+            _ => Err(TsmError::TmuxCommand(format!(
+                "unexpected window size: {}",
+                stdout.trim()
+            ))),
         }
     }
 
@@ -984,6 +955,41 @@ impl Tmux for TmuxClient {
         Self::add_list_keys_args(&mut cmd);
         cmd.args([";", "kill-server"]);
         Self::run_list_keys(cmd)
+    }
+
+    fn snapshot_session(&self, session: &str) -> Result<SessionSnapshot> {
+        // `=` makes tmux match the session name exactly instead of by prefix.
+        let output = self
+            .tmux_cmd()
+            .args(["list-panes", "-s", "-t", &format!("={session}")])
+            .args(["-F", snapshot::PANE_FORMAT])
+            .output()?;
+
+        if !output.status.success() {
+            return Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let mut snapshot =
+            snapshot::parse_pane_lines(session, &String::from_utf8_lossy(&output.stdout))?;
+
+        // Best effort: without `ps`, panes fall back to the bare process name.
+        for pane in snapshot.windows.iter_mut().flat_map(|w| w.panes.iter_mut()) {
+            let tty = pane.tty.strip_prefix("/dev/").unwrap_or(&pane.tty);
+            if let Ok(ps) = Command::new("ps")
+                .args(["-o", "stat=,args=", "-t", tty])
+                .output()
+                && ps.status.success()
+            {
+                pane.foreground_args = snapshot::foreground_args(
+                    &String::from_utf8_lossy(&ps.stdout),
+                    &pane.current_command,
+                );
+            }
+        }
+
+        Ok(snapshot)
     }
 }
 

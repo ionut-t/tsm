@@ -2,6 +2,8 @@
 
 An overengineered CLI tool for managing tmux sessions because apparently `tmux choose-tree` wasn't fancy enough.
 
+![tsm demo: launching a workspace, creating a session from zoxide, switching windows with live preview](assets/demo.gif)
+
 ## Features (aka Why I Built This Instead of Using Native Tmux)
 
 - **Fuzzy session/window switching** - Jump to any session or window with live preview (because scrolling is so 2010)

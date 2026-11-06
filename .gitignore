@@ -16,3 +16,6 @@ Thumbs.db
 # Backup files
 *.bak
 *.tmp
+
+# Demo recording sandbox (fake HOME, tmux socket, zoxide DB)
+demo/.tmp

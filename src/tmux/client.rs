@@ -1,6 +1,7 @@
 use super::snapshot;
 use super::{KeyBinding, SessionSnapshot, Window};
 use crate::error::{Result, TsmError};
+use crate::tmux::reorder_swaps;
 use std::collections::HashMap;
 use std::process::Command;
 
@@ -98,6 +99,8 @@ pub trait Tmux {
     fn find_window_by_pane_id(&self, pane_id: &str) -> Result<(String, u32)>;
 
     fn swap_windows(&self, source_index: u32, target_index: u32) -> Result<()>;
+
+    fn move_window(&self, session: &str, source_index: u32, target_index: u32) -> Result<()>;
 
     fn is_last_window_in_session(&self, session: &str) -> Result<bool>;
 
@@ -881,6 +884,49 @@ impl Tmux for TmuxClient {
             .arg(format!("{}:{}", session_name, target_index))
             .output()?;
 
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(TsmError::TmuxCommand(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn move_window(&self, session: &str, source_index: u32, target_index: u32) -> Result<()> {
+        let indices: Vec<u32> = self
+            .list_windows()?
+            .into_iter()
+            .filter(|w| w.session_name == session)
+            .map(|w| w.index)
+            .collect();
+
+        let swaps = reorder_swaps(&indices, source_index, target_index).ok_or_else(|| {
+            TsmError::InvalidArgument(format!(
+                "Window {source_index} or {target_index} not found in session {session}"
+            ))
+        })?;
+
+        if swaps.is_empty() {
+            return Ok(());
+        }
+
+        // One tmux invocation, commands separated by a bare ";" argument
+        // (the `\;` you'd type in a shell). tmux runs them in sequence.
+        let mut cmd = self.tmux_cmd();
+        for (i, (a, b)) in swaps.iter().enumerate() {
+            if i > 0 {
+                cmd.arg(";");
+            }
+            cmd.arg("swap-window")
+                .arg("-d")
+                .arg("-s")
+                .arg(format!("{session}:{a}"))
+                .arg("-t")
+                .arg(format!("{session}:{b}"));
+        }
+
+        let output = cmd.output()?;
         if output.status.success() {
             Ok(())
         } else {

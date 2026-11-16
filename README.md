@@ -10,7 +10,7 @@ An overengineered CLI tool for managing tmux sessions because apparently `tmux c
 - **Zoxide integration** - Create sessions from frequently used directories (yes, it needed another dependency)
 - **Smart history tracking** - Most recently used sessions and windows appear first (finally, a use for all that data hoarding)
 - **Quick session/window toggling** - Toggle between last 2 sessions or last 2 windows with shortcuts (Alt+Tab for tmux, basically)
-- **Window management** - Move windows between sessions and swap windows within sessions (because clicking is overrated)
+- **Window management** - Move windows between sessions, and swap or reorder windows within sessions (because clicking is overrated)
 - **Workspaces** - Define session layouts in TOML files (because typing commands is for people with free time)
 
 ## Requirements
@@ -62,6 +62,10 @@ tsm send-window -f frontend:3 -t backend  # Move specific window
 tsm swap-window -t 3            # Swap current window with window 3
 tsm swap-window -s 2 -t 5       # Swap window 2 with window 5
 
+# Reorder windows in current session (others shift by one)
+tsm move-window -t 1            # Move current window to index 1
+tsm move-window -s 5 -t 2       # Move window 5 to index 2
+
 # Kill session
 tsm kill                        # Fuzzy finder
 tsm kill -s myproject           # Direct kill
@@ -101,6 +105,7 @@ Most commands have short aliases:
 - `tsm ls` → `tsm last-session`
 - `tsm snw` → `tsm send-window`
 - `tsm sww` → `tsm swap-window`
+- `tsm mw` → `tsm move-window`
 - `tsm ws` → `tsm workspace`
 - `tsm h` → `tsm help`
 
@@ -212,6 +217,7 @@ bind L run-shell "tsm last-session"
 bind l run-shell "tsm last-window"
 bind M display-popup -E -w 80% -h 80% "tsm send-window"
 bind m command-prompt -p "Swap with window:" "run-shell 'tsm swap-window -t %%'"
+bind . command-prompt -p "Move to index:" "run-shell 'tsm move-window -t %%'"
 bind W display-popup -E -w 80% -h 80% "tsm workspace"
 bind ? display-popup -E -w 80% -h 80% "tsm help"
 

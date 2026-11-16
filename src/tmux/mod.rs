@@ -6,4 +6,4 @@ pub mod window;
 pub use client::{Tmux, TmuxClient};
 pub use key_binding::KeyBinding;
 pub use snapshot::SessionSnapshot;
-pub use window::Window;
+pub use window::{Window, reorder_swaps};

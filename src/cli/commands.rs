@@ -3,10 +3,10 @@ use clap::{Parser, Subcommand};
 use crate::{
     cli::{
         completions::CompletionsCommand, help::HelpCommand, kill::KillCommand,
-        last_session::LastSessionCommand, last_window::LastWindowCommand, new::NewCommand,
-        record::RecordCommand, rename::RenameCommand, send_window::SendWindowCommand,
-        swap::SwapWindowCommand, switch::SwitchCommand, switch_windows::SwitchWindowCommand,
-        workspace::WorkspaceCommand,
+        last_session::LastSessionCommand, last_window::LastWindowCommand,
+        move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
+        rename::RenameCommand, send_window::SendWindowCommand, swap::SwapWindowCommand,
+        switch::SwitchCommand, switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
     },
     error::Result,
     fzf::FzfPicker,
@@ -70,6 +70,10 @@ pub enum Commands {
     #[command(alias = "sww")]
     SwapWindow(SwapWindowCommand),
 
+    /// Move a window to a different index in the same session
+    #[command(alias = "mw")]
+    MoveWindow(MoveWindowCommand),
+
     /// Workspace
     #[command(alias = "ws")]
     Workspace(WorkspaceCommand),
@@ -96,6 +100,7 @@ impl Cli {
             Commands::Record(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::SendWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
             Commands::SwapWindow(cmd) => cmd.run(&client, &mut open_history()?),
+            Commands::MoveWindow(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::Workspace(cmd) => cmd.run(&client, &picker),
             Commands::Completions(cmd) => {
                 cmd.run();
@@ -149,6 +154,12 @@ mod tests {
             Commands::SendWindow(_)
         ));
         assert!(matches!(
+            Cli::try_parse_from(["tsm", "mw", "-t", "2"])
+                .unwrap()
+                .command,
+            Commands::MoveWindow(_)
+        ));
+        assert!(matches!(
             Cli::try_parse_from(["tsm", "ws"]).unwrap().command,
             Commands::Workspace(_)
         ));
@@ -159,6 +170,12 @@ mod tests {
         // `--target` has no default and is mandatory.
         assert!(Cli::try_parse_from(["tsm", "swap-window"]).is_err());
         assert!(Cli::try_parse_from(["tsm", "swap-window", "--target", "2"]).is_ok());
+    }
+
+    #[test]
+    fn move_window_requires_target() {
+        assert!(Cli::try_parse_from(["tsm", "move-window"]).is_err());
+        assert!(Cli::try_parse_from(["tsm", "move-window", "--target", "2"]).is_ok());
     }
 
     #[test]

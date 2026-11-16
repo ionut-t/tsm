@@ -11,7 +11,7 @@ use crate::{
 /// Can move a specified window or prompt for selection via fzf.
 /// If the source session is not specified and a target is, defaults to the current window.
 #[derive(clap::Parser, Debug)]
-pub struct MoveWindowCommand {
+pub struct SendWindowCommand {
     /// From session name
     #[clap(short, long)]
     from: Option<String>,
@@ -25,8 +25,8 @@ pub struct MoveWindowCommand {
     quiet: bool,
 }
 
-impl MoveWindowCommand {
-    /// Executes the move window command.
+impl SendWindowCommand {
+    /// Executes the send window command.
     ///
     /// Moves the specified or selected window to the target session and switches to it.
     pub fn run(
@@ -193,8 +193,8 @@ mod tests {
         }
     }
 
-    fn cmd(from: Option<&str>, to: Option<&str>, quiet: bool) -> MoveWindowCommand {
-        MoveWindowCommand {
+    fn cmd(from: Option<&str>, to: Option<&str>, quiet: bool) -> SendWindowCommand {
+        SendWindowCommand {
             from: from.map(String::from),
             to: to.map(String::from),
             quiet,

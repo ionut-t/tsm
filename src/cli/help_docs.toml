@@ -67,11 +67,11 @@ examples = [
 ]
 
 [[tsm]]
-name = "move-window"
+name = "send-window"
 examples = [
-  { info = "Interactively move a window to another session", cmd = "tsm move-window" },
-  { info = "Move the current window to a session", cmd = "tsm move-window -t backend" },
-  { info = "Move a specific window", cmd = "tsm move-window -f frontend:3 -t backend" },
+  { info = "Interactively move a window to another session", cmd = "tsm send-window" },
+  { info = "Move the current window to a session", cmd = "tsm send-window -t backend" },
+  { info = "Move a specific window", cmd = "tsm send-window -f frontend:3 -t backend" },
 ]
 
 [[tsm]]

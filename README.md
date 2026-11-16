@@ -54,9 +54,9 @@ tsm last-window                 # Toggle to last active window
 tsm last-session                # Toggle to last active window in last active session
 
 # Move windows between sessions
-tsm move-window                 # Interactive: pick window + target session
-tsm move-window -t backend      # Move current window to "backend" session
-tsm move-window -f frontend:3 -t backend  # Move specific window
+tsm send-window                 # Interactive: pick window + target session
+tsm send-window -t backend      # Move current window to "backend" session
+tsm send-window -f frontend:3 -t backend  # Move specific window
 
 # Swap windows in current session
 tsm swap-window -t 3            # Swap current window with window 3
@@ -99,7 +99,7 @@ Most commands have short aliases:
 - `tsm r` → `tsm rename`
 - `tsm lw` → `tsm last-window`
 - `tsm ls` → `tsm last-session`
-- `tsm mv` → `tsm move-window`
+- `tsm snw` → `tsm send-window`
 - `tsm sww` → `tsm swap-window`
 - `tsm ws` → `tsm workspace`
 - `tsm h` → `tsm help`
@@ -210,7 +210,7 @@ bind k display-popup -E -w 40% -h 40% "tsm kill"
 bind N display-popup -E -w 80% -h 80% "tsm new --preview"
 bind L run-shell "tsm last-session"
 bind l run-shell "tsm last-window"
-bind M display-popup -E -w 80% -h 80% "tsm move-window"
+bind M display-popup -E -w 80% -h 80% "tsm send-window"
 bind m command-prompt -p "Swap with window:" "run-shell 'tsm swap-window -t %%'"
 bind W display-popup -E -w 80% -h 80% "tsm workspace"
 bind ? display-popup -E -w 80% -h 80% "tsm help"

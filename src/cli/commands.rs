@@ -3,10 +3,10 @@ use clap::{Parser, Subcommand};
 use crate::{
     cli::{
         completions::CompletionsCommand, help::HelpCommand, kill::KillCommand,
-        last_session::LastSessionCommand, last_window::LastWindowCommand,
-        move_window::MoveWindowCommand, new::NewCommand, record::RecordCommand,
-        rename::RenameCommand, swap::SwapWindowCommand, switch::SwitchCommand,
-        switch_windows::SwitchWindowCommand, workspace::WorkspaceCommand,
+        last_session::LastSessionCommand, last_window::LastWindowCommand, new::NewCommand,
+        record::RecordCommand, rename::RenameCommand, send_window::SendWindowCommand,
+        swap::SwapWindowCommand, switch::SwitchCommand, switch_windows::SwitchWindowCommand,
+        workspace::WorkspaceCommand,
     },
     error::Result,
     fzf::FzfPicker,
@@ -62,9 +62,9 @@ pub enum Commands {
     /// Record window history
     Record(RecordCommand),
 
-    /// Move window to another session
-    #[command(alias = "mv")]
-    MoveWindow(MoveWindowCommand),
+    /// Send window to another session
+    #[command(alias = "snw")]
+    SendWindow(SendWindowCommand),
 
     /// Swap two windows in the same session
     #[command(alias = "sww")]
@@ -94,7 +94,7 @@ impl Cli {
             Commands::LastSession(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::LastWindow(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::Record(cmd) => cmd.run(&client, &mut open_history()?),
-            Commands::MoveWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
+            Commands::SendWindow(cmd) => cmd.run(&client, &picker, &mut open_history()?),
             Commands::SwapWindow(cmd) => cmd.run(&client, &mut open_history()?),
             Commands::Workspace(cmd) => cmd.run(&client, &picker),
             Commands::Completions(cmd) => {
@@ -145,8 +145,8 @@ mod tests {
             Commands::SwitchWindow(_)
         ));
         assert!(matches!(
-            Cli::try_parse_from(["tsm", "mv"]).unwrap().command,
-            Commands::MoveWindow(_)
+            Cli::try_parse_from(["tsm", "snw"]).unwrap().command,
+            Commands::SendWindow(_)
         ));
         assert!(matches!(
             Cli::try_parse_from(["tsm", "ws"]).unwrap().command,

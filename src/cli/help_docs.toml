@@ -82,6 +82,13 @@ examples = [
 ]
 
 [[tsm]]
+name = "move-window"
+examples = [
+  { info = "Move the current window to index 1, shifting the others", cmd = "tsm move-window -t 1" },
+  { info = "Move window 5 to index 2", cmd = "tsm move-window -s 5 -t 2" },
+]
+
+[[tsm]]
 name = "workspace"
 examples = [
   { info = "Pick and launch a workspace", cmd = "tsm workspace" },

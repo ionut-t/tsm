@@ -445,6 +445,13 @@ impl Tmux for MockTmux {
         Ok(())
     }
 
+    fn move_window(&self, session: &str, source_index: u32, target_index: u32) -> Result<()> {
+        self.log(format!(
+            "move_window({session}:{source_index}->{target_index})"
+        ));
+        Ok(())
+    }
+
     fn is_last_window_in_session(&self, session: &str) -> Result<bool> {
         let count = self
             .windows

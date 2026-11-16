@@ -84,7 +84,7 @@ impl SendWindowCommand {
                     client.switch_session(&to_session)?;
                 }
 
-                client.move_window(&from_session, from_window_index, &to_session)?;
+                client.send_window(&from_session, from_window_index, &to_session)?;
 
                 let (session, new_window_index) = client.find_window_by_pane_id(&pane_id)?;
 
@@ -230,7 +230,7 @@ mod tests {
             .run(&mock, &MockPicker::cancelling(), &mut history)
             .unwrap();
 
-        assert!(mock.called("move_window(dev:1->prod)"));
+        assert!(mock.called("send_window(dev:1->prod)"));
         assert!(mock.called("switch_to_window(prod,1)"));
         assert!(mock.called("display_message(Moved window dev:1 to session prod:1)"));
     }
@@ -249,10 +249,10 @@ mod tests {
             .run(&mock, &MockPicker::cancelling(), &mut history)
             .unwrap();
 
-        // switch_session(prod) happens before move_window in the call log.
+        // switch_session(prod) happens before send_window in the call log.
         let calls = mock.calls();
         let switch_pos = calls.iter().position(|c| c == "switch_session(prod)");
-        let move_pos = calls.iter().position(|c| c == "move_window(dev:1->prod)");
+        let move_pos = calls.iter().position(|c| c == "send_window(dev:1->prod)");
         assert!(switch_pos.is_some(), "expected switch_session(prod)");
         assert!(switch_pos < move_pos, "switch must precede the move");
     }
@@ -271,7 +271,7 @@ mod tests {
         cmd(Some("dev:1"), Some("prod"), true)
             .run(&mock, &MockPicker::cancelling(), &mut history)
             .unwrap();
-        assert!(mock.called("move_window(dev:1->prod)"));
+        assert!(mock.called("send_window(dev:1->prod)"));
         assert!(!mock.called("display_message"));
     }
 
@@ -294,7 +294,7 @@ mod tests {
             .run(&mock, &MockPicker::cancelling(), &mut history)
             .unwrap();
 
-        assert!(mock.called("move_window(dev:3->prod)"));
+        assert!(mock.called("send_window(dev:3->prod)"));
         assert!(mock.called("switch_to_window(prod,1)"));
     }
 
@@ -336,7 +336,7 @@ mod tests {
         assert!(shown[0].iter().any(|row| row.contains("dev:1")));
         // ...and the session picker lists only sessions other than the source.
         assert_eq!(shown[1], vec!["prod".to_string()]);
-        assert!(mock.called("move_window(dev:1->prod)"));
+        assert!(mock.called("send_window(dev:1->prod)"));
         assert!(mock.called("switch_to_window(prod,1)"));
     }
 
@@ -349,7 +349,7 @@ mod tests {
         cmd(None, None, false)
             .run(&mock, &MockPicker::cancelling(), &mut history)
             .unwrap();
-        assert!(!mock.called("move_window"));
+        assert!(!mock.called("send_window"));
     }
 
     #[test]

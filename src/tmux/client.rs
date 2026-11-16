@@ -91,7 +91,7 @@ pub trait Tmux {
 
     fn get_current_window(&self) -> Result<(String, u32)>;
 
-    fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()>;
+    fn send_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()>;
 
     fn get_pane_id(&self, session: &str, window_index: u32) -> Result<String>;
 
@@ -810,7 +810,7 @@ impl Tmux for TmuxClient {
         }
     }
 
-    fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
+    fn send_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
         let output = self
             .tmux_cmd()
             .arg("move-window")

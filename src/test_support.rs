@@ -421,9 +421,9 @@ impl Tmux for MockTmux {
         Ok(self.current_window.clone())
     }
 
-    fn move_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
+    fn send_window(&self, from_session: &str, from_index: u32, to_session: &str) -> Result<()> {
         self.log(format!(
-            "move_window({from_session}:{from_index}->{to_session})"
+            "send_window({from_session}:{from_index}->{to_session})"
         ));
         Ok(())
     }
